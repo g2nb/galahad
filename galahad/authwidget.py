@@ -1,6 +1,7 @@
-from bioblend.galaxy import GalaxyInstance
+from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
 from .sessions import session
+from .toolwidget import GalaxyTool
 from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color
 
 
@@ -47,30 +48,16 @@ class GalaxyAuthWidget(UIBuilder):
 
     def __init__(self, session=None, **kwargs):
         """Initialize the authentication widget"""
-        self.session = session if session else None
-
-        # TODO: Redo or cut
-        # # Assign the session object, lazily creating one if needed
-        # if session is None: self.session = GalaxyInstance(url='', email='', password='')
-        # else: self.session = session
-        #
-        # # Set blank token
-        # self.token = None
-        #
-        # # Check to see if the provided session has valid credentials
-        # if self.has_credentials() and self.validate_credentials():
-        #     self.prepare_session()
-        #
-        #     # Display the widget with the system message and no form
-        #     UIBuilder.__init__(self, lambda: None, name=self.session.username, subtitle=self.session.url,
-        #                        display_header=False, display_footer=False, color=session_color(self.session.url),
-        #                        collapsed=True, logo=GALAXY_LOGO, **kwargs)
-        #
-        # # If not, prompt the user to login
-        # else:
+        self.session = session if isinstance(session, GalaxyInstance) else None
 
         # Apply the display spec
         for key, value in self.login_spec.items(): kwargs[key] = value
+
+        # If a session has been provided, login automatically
+        if session:
+            for k, v in [('collapsed', True), ('name', self.session.email), ('subtitle', self.session.url[:-4]),
+                         ('display_header', False), ('display_footer', False)]: kwargs[k] = v
+            self.prepare_session()
 
         # Call the superclass constructor with the spec
         UIBuilder.__init__(self, self.login, **kwargs)
@@ -79,17 +66,17 @@ class GalaxyAuthWidget(UIBuilder):
         """Login to the Galaxy server"""
         try:
             self.session = GalaxyInstance(url=server, email=email, password=password)
-            self.replace_widget()
-            self.prepare_session()
         except Exception:
             self.error = 'Invalid email address or password. Please try again.'
+        self.replace_widget()
+        self.prepare_session()
 
     def replace_widget(self):
         """Replace the unauthenticated widget with the authenticated mode"""
         self.form.form.children[2].value = ''        # Blank password so it doesn't get serialized
         self.form.collapsed = True
-        self.form.name = self.session.email
-        self.form.subtitle = self.session.url[:-4]
+        self.form.name = self.session.gi.email
+        self.form.subtitle = self.session.gi.url[:-4]
         self.form.display_header=False
         self.form.display_footer=False
         self.form.form.children = []
@@ -104,31 +91,27 @@ class GalaxyAuthWidget(UIBuilder):
     def register_session(self):
         """Register the validated credentials with the SessionList"""
         session.register(self.session)
-        # TODO: Implement sessionlist
 
     def register_tools(self):
         """Get the list available tools and register widgets for them with the tool manager"""
-        # TODO: Implement for Galaxy
-        pass
-        # for task in self.session.get_task_list():
-        #     tool = TaskTool(server_name(self.session.url), task)
-        #     ToolManager.instance().register(tool)
+        server = server_name(self.session.gi.url[:-4])
+        tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in self.session.tools.list()]
+        ToolManager.instance().register_all(tools)
 
     def register_history(self):
-        # TODO: Implement for Galaxy
-        pass
-        # data_list = []
-        # for job in self.session.get_recent_jobs():
-        #     origin = server_name(self.session.url)
-        #     group = f"{job.job_number}. {job.task_name}"
-        #
-        #     # Register a custom data group widget (GPJobWidget) with the manager
-        #     DataManager.instance().group_widget(origin=origin, group=group, widget=GPJobWidget(job))
-        #
-        #     # Add data entries for all output files
-        #     for file in job.get_output_files():
-        #         data_list.append(Data(origin=origin, group=group, uri=file.get_url()))
-        # DataManager.instance().register_all(data_list)
+        data_list = []
+        origin = server_name(self.session.gi.url[:-4])
+        for history in self.session.histories.list():
+            # Register a custom data group widget (GalaxyHistoryWidget) with the manager
+            # TODO: Implement
+            #  DataManager.instance().group_widget(origin=origin, group=history.name, widget=GalaxyJobWidget(history))
+
+            # Add data entries for all output files
+            for content in history.content_infos:
+                data_list.append(Data(origin=origin, group=history.name,
+                                      uri=f"data://{content.id}",
+                                      label=content.name, kind=content.wrapped['extension']))
+        DataManager.instance().register_all(data_list)
 
     def trigger_login(self):
         """Dispatch a login event after authentication"""
@@ -139,7 +122,7 @@ class GalaxyAuthWidget(UIBuilder):
 class AuthenticationTool(NBTool):
     """Tool wrapper for the authentication widget"""
     origin = '+'
-    id = 'authentication'
+    id = 'galaxy_authentication'
     name = 'Galaxy Login'
     description = 'Log into a Galaxy server'
     load = lambda x: GalaxyAuthWidget()

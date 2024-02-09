@@ -13,7 +13,7 @@ class SessionList:
         """
 
         # Validate that the server is not already registered
-        index = self._get_index(session.url)
+        index = self._get_index(session.gi.url)
         new_server = index == -1
 
         # Add the new session to the list
@@ -71,7 +71,7 @@ class SessionList:
         """
         for i in range(len(self.sessions)):
             session = self.sessions[i]
-            if session.url.startswith(server_url): return i
+            if session.gi.url.startswith(server_url): return i
         return -1
 
 

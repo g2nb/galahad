@@ -1,7 +1,3 @@
-import requests
-from urllib.parse import urlparse
-
-
 GALAXY_SERVERS = {
     'Galaxy Main': 'https://usegalaxy.org',
     'Galaxy EU': 'https://usegalaxy.eu',
@@ -37,20 +33,3 @@ def session_color(index=0, secondary_color=False):
         for i in range(len(servers)):
             if index == servers[i]: return color_string(*GALAXY_COLORS[i], secondary_color)
         return color_string(*GALAXY_COLORS[-1], secondary_color)
-
-
-def is_url(url_str):
-    """Check whether the string is a valid URL"""
-    # TODO: Fix in JobWidget
-    result = urlparse(url_str)
-    return bool(result.scheme and result.netloc)
-
-
-def redirect_url(url, token=None):
-    """Get the end URL of an HTTP redirect, or return initial URL if no redirect"""
-    # TODO: Fix in JobWidget
-    headers = {'User-Agent': 'GenePatternRest'}
-    if token: headers['Authorization'] = f'Bearer {token}'
-    response = requests.head(url, headers=headers, allow_redirects=False)
-    if 'Location' in response.headers: return response.headers['Location']
-    else: return url
