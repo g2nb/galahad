@@ -3,9 +3,9 @@ import IPython
 from bioblend.galaxy import GalaxyInstance
 from bioblend.galaxy.objects.wrappers import Dataset, HistoryDatasetAssociation, Tool
 
-from .datasetwidget import GalaxyDatasetWidget
-from .authwidget import GalaxyAuthWidget
-from .toolwidget import GalaxyToolWidget
+from .dataset import GalaxyDatasetWidget
+from .authentication import GalaxyAuthWidget
+from .tool import GalaxyToolWidget
 
 
 def display(content, **kwargs):

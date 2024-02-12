@@ -3,12 +3,11 @@ from bioblend import ConnectionError
 from bioblend.galaxy.objects.wrappers import Dataset, HistoryDatasetAssociation
 from nbtools import UIOutput, EventManager, ToolManager
 from .sessions import session
-from .utils import GALAXY_LOGO, server_name, session_color
+from .utils import GALAXY_LOGO, server_name, session_color, galaxy_url
 
 
 class GalaxyDatasetWidget(UIOutput):
     """A widget for representing a Galaxy Dataset"""
-    sharing_displayed = False
     dataset = None
 
     def __init__(self, dataset=None, **kwargs):
@@ -23,7 +22,7 @@ class GalaxyDatasetWidget(UIOutput):
         EventManager.instance().register("galaxy.login", self.login_callback)
 
     def dataset_origin(self):
-        if self.initialized(): return server_name(self.dataset.gi.gi.url[:-4])
+        if self.initialized(): return server_name(galaxy_url(self.dataset.gi))
         else: return ''
 
     def set_color(self, kwargs={}):
@@ -31,7 +30,7 @@ class GalaxyDatasetWidget(UIOutput):
         if 'color' in kwargs: return
 
         # Otherwise, set the color based on the session
-        if self.initialized(): kwargs['color'] = session_color(self.dataset.gi.gi.url[:-4])
+        if self.initialized(): kwargs['color'] = session_color(galaxy_url(self.dataset.gi))
         else: kwargs['color'] = session_color()
 
         return kwargs['color']
@@ -54,7 +53,7 @@ class GalaxyDatasetWidget(UIOutput):
         if self.initialized():
             # Add the job information to the widget
             self.name = self.dataset.name
-            self.origin = server_name(self.dataset.gi.gi.url[:-4])
+            self.origin = server_name(galaxy_url(self.dataset.gi))
             self.status = self.status_text()
             self.description = self.submitted_text()
             self.files = self.files_list()
@@ -92,7 +91,7 @@ class GalaxyDatasetWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the dataset has been set
-        return [f"{self.dataset.gi.gi.url[:-4]}{self.dataset.wrapped['download_url']}"]
+        return [f"{galaxy_url(self.dataset.gi)}{self.dataset.wrapped['download_url']}"]
 
     def handle_notification(self):
         if self.dataset.state == 'error':

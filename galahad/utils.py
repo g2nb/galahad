@@ -21,6 +21,10 @@ def server_name(search_url):
     return search_url
 
 
+def galaxy_url(session):
+    return session.gi.url[:-4] if hasattr(session, 'gi') else session.url[:-4]
+
+
 def color_string(r, g, b, a, secondary_color=False):
     return f'rgba({r}, {g}, {b}, {0.50 if secondary_color else a})'
 

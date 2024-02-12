@@ -1,6 +1,7 @@
-from .authwidget import GALAXY_SERVERS, GalaxyAuthWidget
-from .toolwidget import GalaxyToolWidget, reproduce_job, load_tool
-from .datasetwidget import GalaxyDatasetWidget
+from .authentication import GALAXY_SERVERS, GalaxyAuthWidget
+from .tool import GalaxyToolWidget, reproduce_job, load_tool
+from .dataset import GalaxyDatasetWidget
+from .history import GalaxyHistoryWidget
 from .sessions import session
 from .display import display
 

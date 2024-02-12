@@ -1,9 +1,9 @@
 from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
+from .history import GalaxyHistoryWidget
 from .sessions import session
-from .toolwidget import GalaxyTool
-from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color
-
+from .tool import GalaxyTool
+from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -55,7 +55,7 @@ class GalaxyAuthWidget(UIBuilder):
 
         # If a session has been provided, login automatically
         if session:
-            for k, v in [('collapsed', True), ('name', self.session.email), ('subtitle', self.session.url[:-4]),
+            for k, v in [('collapsed', True), ('name', self.session.email), ('subtitle', galaxy_url(self.session)),
                          ('display_header', False), ('display_footer', False)]: kwargs[k] = v
             self.prepare_session()
 
@@ -76,7 +76,7 @@ class GalaxyAuthWidget(UIBuilder):
         self.form.form.children[2].value = ''        # Blank password so it doesn't get serialized
         self.form.collapsed = True
         self.form.name = self.session.gi.email
-        self.form.subtitle = self.session.gi.url[:-4]
+        self.form.subtitle = galaxy_url(self.session)
         self.form.display_header=False
         self.form.display_footer=False
         self.form.form.children = []
@@ -94,23 +94,24 @@ class GalaxyAuthWidget(UIBuilder):
 
     def register_tools(self):
         """Get the list available tools and register widgets for them with the tool manager"""
-        server = server_name(self.session.gi.url[:-4])
+        server = server_name(galaxy_url(self.session))
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in self.session.tools.list()]
         ToolManager.instance().register_all(tools)
 
     def register_history(self):
         data_list = []
-        origin = server_name(self.session.gi.url[:-4])
+        origin = server_name(galaxy_url(self.session))
         for history in self.session.histories.list():
             # Register a custom data group widget (GalaxyHistoryWidget) with the manager
-            # TODO: Implement
-            #  DataManager.instance().group_widget(origin=origin, group=history.name, widget=GalaxyJobWidget(history))
+            DataManager.instance().group_widget(origin=origin, group=history.name, widget=GalaxyHistoryWidget(history))
 
             # Add data entries for all output files
             for content in history.content_infos:
+                if content.wrapped['deleted']: continue
+                kind = content.wrapped['extension'] if 'extension' in content.wrapped else ''
                 data_list.append(Data(origin=origin, group=history.name,
                                       uri=f"data://{content.id}",
-                                      label=content.name, kind=content.wrapped['extension']))
+                                      label=content.name, kind=kind))
         DataManager.instance().register_all(data_list)
 
     def trigger_login(self):

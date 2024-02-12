@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from gp import GPTask
 from IPython.display import display
 from ipywidgets import Output
-from .datasetwidget import GalaxyDatasetWidget
+from .dataset import GalaxyDatasetWidget
 from nbtools import NBTool, UIBuilder, UIOutput, python_safe, EventManager
 from .utils import GALAXY_LOGO, session_color, server_name
 
