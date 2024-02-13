@@ -1,5 +1,6 @@
 from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
+from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool
@@ -101,17 +102,20 @@ class GalaxyAuthWidget(UIBuilder):
     def register_history(self):
         data_list = []
         origin = server_name(galaxy_url(self.session))
+        def create_history_lambda(history): return lambda: GalaxyHistoryWidget(history)
+        def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
+
         for history in self.session.histories.list():
             # Register a custom data group widget (GalaxyHistoryWidget) with the manager
-            DataManager.instance().group_widget(origin=origin, group=history.name, widget=GalaxyHistoryWidget(history))
+            DataManager.instance().group_widget(origin=origin, group=history.name, widget=create_history_lambda(history))
 
             # Add data entries for all output files
             for content in history.content_infos:
                 if content.wrapped['deleted']: continue
                 kind = content.wrapped['extension'] if 'extension' in content.wrapped else ''
-                data_list.append(Data(origin=origin, group=history.name,
-                                      uri=f"data://{content.id}",
-                                      label=content.name, kind=kind))
+                data = Data(origin=origin, group=history.name, uri=content.id, label=content.name, kind=kind)
+                DataManager.instance().data_widget(origin=data.origin, uri=data.uri, widget=create_dataset_lambda(content.id))
+                data_list.append(data)
         DataManager.instance().register_all(data_list)
 
     def trigger_login(self):
