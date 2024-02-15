@@ -61,7 +61,8 @@ class GalaxyHistoryWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the history has been set
-        return [f"{galaxy_url(self.history.gi)}{dataset.wrapped['url']}/display" for dataset in self.history.content_infos]
+        return [(f"{galaxy_url(self.history.gi)}{dataset.wrapped['url']}/display", dataset.name, dataset.wrapped['extension'])
+                for dataset in self.history.content_infos]
 
     def history_origin(self):
         if self.initialized(): return server_name(galaxy_url(self.history.gi))
