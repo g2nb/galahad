@@ -69,6 +69,7 @@ class GalaxyAuthWidget(UIBuilder):
             self.session = GalaxyInstance(url=server, email=email, password=password)
         except Exception:
             self.error = 'Invalid email address or password. Please try again.'
+            return
         self.replace_widget()
         self.prepare_session()
 
