@@ -46,7 +46,6 @@ class GalaxyDatasetWidget(UIOutput):
 
     def poll(self):
         """Poll the Galaxy server for the dataset info and display it in the widget"""
-
         # If a Dataset ID is set, attempt to initialize from SessionList
         self.initialize(session.get(0))
 
@@ -57,6 +56,9 @@ class GalaxyDatasetWidget(UIOutput):
             self.status = self.status_text()
             self.description = self.submitted_text()
             self.files = self.files_list()
+
+            # Register any data
+            self.register_data(group=self.dataset.container.name)
 
             # Send notification if completed
             self.handle_notification()
@@ -80,7 +82,7 @@ class GalaxyDatasetWidget(UIOutput):
     def poll_if_needed(self):
         """Begin a polling interval if the job is pending or running"""
         if not self.dataset.state == 'ok' and not self.dataset.state == 'error':
-            timer = Timer(15.0, lambda: self.poll())
+            timer = Timer(15.0, lambda: self.dataset.refresh() and self.poll())
             timer.start()
 
     def submitted_text(self):
@@ -103,9 +105,6 @@ class GalaxyDatasetWidget(UIOutput):
     def status_text(self):
         """Return human-friendly status text"""
         if not self.initialized():              return ''  # Ensure the Galaxy instance has been set
-        if self.dataset.state == 'error':      return 'Error'
-        elif self.dataset.state == 'running':  return 'Running'
-        elif self.dataset.state == 'ok':       return 'Ready'
         else:                                   return self.dataset.state
 
     def workspace_download(self, file_name):
