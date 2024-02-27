@@ -1,14 +1,9 @@
 import inspect
-import json
 import os
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
-from gp import GPTask
 from IPython.display import display
-from ipywidgets import Output
 from .dataset import GalaxyDatasetWidget
-from nbtools import NBTool, UIBuilder, UIOutput, python_safe, EventManager
-from .utils import GALAXY_LOGO, session_color, server_name, galaxy_url
+from nbtools import NBTool, UIBuilder, python_safe
+from .utils import GALAXY_LOGO, session_color, galaxy_url
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -59,18 +54,38 @@ class GalaxyToolWidget(UIBuilder):
         return kwargs
 
     def add_type_spec(self, task_param, param_spec):
-        if task_param['type'] == 'data':
-            param_spec['type'] = 'file'
-            if task_param['multiple']: param_spec['maximum'] = 100
-        elif task_param['type'] == 'select':
-            param_spec['type'] = 'choice'
-            param_spec['choices'] = {c[0]: c[1] for c in task_param['options']}
-            if task_param['textable']: param_spec['combo'] = True
-            if task_param['multiple']: param_spec['multiple'] = True
-        # elif task_param.attributes['type'] == 'java.lang.Integer': param_spec['type'] = 'number'
-        # elif task_param.attributes['type'] == 'java.lang.Float': param_spec['type'] = 'number'
-        # elif task_param.attributes['type'].lower() == 'password': param_spec['type'] = 'password'
+        if   task_param['type'] == 'select':            param_spec['type'] = 'choice'
+        elif task_param['type'] == 'hidden':            param_spec['type'] = 'text'
+        elif task_param['type'] == 'upload_dataset':    param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'genomebuild':       param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'conditional':       param_spec['type'] = 'text'     # TODO: Implement sub-parameters
+        elif task_param['type'] == 'baseurl':           param_spec['type'] = 'text'
+        elif task_param['type'] == 'data':              param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'text':              param_spec['type'] = 'text'
+        elif task_param['type'] == 'boolean':           param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'directory_uri':     param_spec['type'] = 'text'     # TODO: Verify
+        elif task_param['type'] == 'data_collection':   param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'repeat':            param_spec['type'] = 'text'     # TODO: Implement sub-parameters
+        elif task_param['type'] == 'section':           param_spec['type'] = 'text'     # TODO: Implement sub-parameters
+        elif task_param['type'] == 'rules':             param_spec['type'] = 'text'     # TODO: Verify
+        elif task_param['type'] == 'data_column':       param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'integer':           param_spec['type'] = 'number'   # TODO: Implement min/max support
+        elif task_param['type'] == 'float':             param_spec['type'] = 'number'
+        elif task_param['type'] == 'hidden_data':       param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'color':             param_spec['type'] = 'text'     # TODO: Implement color-picker
+        elif task_param['type'] == 'drill_down':        param_spec['type'] = 'choice'   # TODO: Verify
         else: param_spec['type'] = 'text'
+
+        # Set parameter attributes
+        if 'optional' in task_param and task_param['optional']: param_spec['optional'] = True
+        if 'multiple' in task_param and task_param['multiple']: param_spec['multiple'] = True
+        if 'multiple' in task_param and task_param['multiple']: param_spec['maximum'] = 100
+        if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
+        if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
+        if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
+        if 'options' in task_param: param_spec['choices'] = { c[0]: c[1] for c in task_param['options'] }
+        # TODO: Implement min/max support - especially for numbers
+        # TODO: Implement dynamic refresh for certain types (drill_down, data_column, etc.)
 
     @staticmethod
     def override_if_set(safe_name, attr, param_overrides, param_val):
@@ -102,17 +117,18 @@ class GalaxyToolWidget(UIBuilder):
             self.add_type_spec(p, spec[safe_name])
         return spec
 
-    @staticmethod
-    def extract_parameter_groups(task):
-        groups = task.param_groups if hasattr(task, 'param_groups') else param_groups(task)     # Get param groups
-        job_options_group = task.job_group if hasattr(task, 'job_group') else job_group(task)   # Get job options
-        job_options_group['advanced'] = True                                                    # Hide by default
-        all_groups = groups + [job_options_group]                                               # Join groups
-        for group in all_groups:                                                                # Escape param names
-            if 'parameters' in group:
-                for i in range(len(group['parameters'])):
-                    group['parameters'][i] = python_safe(group['parameters'][i])
-        return all_groups
+    # TODO: Support sections
+    # @staticmethod
+    # def extract_parameter_groups(task):
+    #     groups = task.param_groups if hasattr(task, 'param_groups') else param_groups(task)     # Get param groups
+    #     job_options_group = task.job_group if hasattr(task, 'job_group') else job_group(task)   # Get job options
+    #     job_options_group['advanced'] = True                                                    # Hide by default
+    #     all_groups = groups + [job_options_group]                                               # Join groups
+    #     for group in all_groups:                                                                # Escape param names
+    #         if 'parameters' in group:
+    #             for i in range(len(group['parameters'])):
+    #                 group['parameters'][i] = python_safe(group['parameters'][i])
+    #     return all_groups
 
     def generate_upload_callback(self):
         """Create an upload callback to pass to file input widgets"""
@@ -143,7 +159,6 @@ class GalaxyToolWidget(UIBuilder):
 
     def __init__(self, tool=None, origin='', id='', **kwargs):
         """Initialize the tool widget"""
-        # TODO: Reimplement
         self.tool = tool
         self.kwargs = kwargs
         if tool and origin is None: origin = galaxy_url(tool.gi)
@@ -165,7 +180,7 @@ class GalaxyToolWidget(UIBuilder):
             'origin': origin,
             'name': tool.name,
             'description': tool.wrapped['description'],
-            # 'parameter_groups': GalaxyToolWidget.extract_parameter_groups(self.tool),
+            # 'parameter_groups': GalaxyToolWidget.extract_parameter_groups(self.tool), # TODO: Support sections
             'parameters': self.parameter_spec,
             'subtitle': f'Version {tool.version}',
             'upload_callback': self.generate_upload_callback(),
