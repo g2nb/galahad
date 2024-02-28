@@ -7,7 +7,7 @@ from .utils import GALAXY_LOGO, session_color, galaxy_url
 
 
 class GalaxyToolWidget(UIBuilder):
-    """A widget for representing the status of a GenePattern job"""
+    """A widget representing a Galaxy tool"""
     session_color = None
     tool = None
     function_wrapper = None
@@ -69,7 +69,7 @@ class GalaxyToolWidget(UIBuilder):
         elif task_param['type'] == 'section':           param_spec['type'] = 'text'     # TODO: Implement sub-parameters
         elif task_param['type'] == 'rules':             param_spec['type'] = 'text'     # TODO: Verify
         elif task_param['type'] == 'data_column':       param_spec['type'] = 'choice'   # TODO: Verify
-        elif task_param['type'] == 'integer':           param_spec['type'] = 'number'   # TODO: Implement min/max support
+        elif task_param['type'] == 'integer':           param_spec['type'] = 'number'
         elif task_param['type'] == 'float':             param_spec['type'] = 'number'
         elif task_param['type'] == 'hidden_data':       param_spec['type'] = 'file'     # TODO: Verify
         elif task_param['type'] == 'color':             param_spec['type'] = 'text'     # TODO: Implement color-picker
@@ -131,20 +131,21 @@ class GalaxyToolWidget(UIBuilder):
     #     return all_groups
 
     def generate_upload_callback(self):
-        """Create an upload callback to pass to file input widgets"""
-        def genepattern_upload_callback(values):
+        """Create an upload callback to pass to data inputs"""
+        # TODO: Implement for real
+        def galaxy_upload_callback(values):
             try:
                 for k in values:
                     path = os.path.realpath(k)
-                    gpfile = self.tool.server_data.upload_file(k, path)
+                    dataset = self.tool.server_data.upload_file(k, path)
                     os.remove(path)
-                    return gpfile.get_url()
+                    return dataset.get_url()
             except Exception as e:
                 self.error = f"Error encountered uploading file: {e}"
-        return genepattern_upload_callback
+        return galaxy_upload_callback
 
-    def handle_error_task(self, error_message, name='GenePattern Module', **kwargs):
-        """Display an error message if the task is None"""
+    def handle_error_task(self, error_message, name='Galaxy Tool', **kwargs):
+        """Display an error message if the tool is None"""
         ui_args = {'color': session_color(), **kwargs}
         UIBuilder.__init__(self, lambda: None, **ui_args)
 

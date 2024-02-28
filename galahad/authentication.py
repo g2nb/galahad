@@ -15,7 +15,7 @@ REGISTER_EVENT = """
 
 
 class GalaxyAuthWidget(UIBuilder):
-    """A widget for authenticating with a GenePattern server"""
+    """A widget for authenticating with a Galaxy server"""
     login_spec = {  # The display values for building the login UI
         'name': 'Login',
         'collapse': False,

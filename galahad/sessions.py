@@ -1,13 +1,10 @@
 class SessionList:
-    """
-    Keeps a list of all currently registered Galaxy sessions
-    """
+    """ Keeps a list of all currently registered Galaxy sessions """
     sessions = []
 
     def register(self, session):
         """
-        Register a new GalaxyInstance session for the provided
-        server, username and password. Return the session.
+        Register a new GalaxyInstance session for the provided server, username and password. Return the session.
         :param session:
         :return:
         """
@@ -44,12 +41,10 @@ class SessionList:
 
     def make(self, server):
         """
-        Returns the registered session, if one exists.
-        Otherwise, returns None
+        Returns the registered session, if one exists. Otherwise, returns None
         :param server:
         :return:
         """
-        # TODO: Fix with ToolWidget - need to support None being returned rather than GalaxyInstance
         session = self.get(server)
         if session: return session
         elif isinstance(server, int): raise RuntimeError('make() does not support session indexes')

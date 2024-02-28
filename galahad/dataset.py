@@ -46,6 +46,7 @@ class GalaxyDatasetWidget(UIOutput):
 
     def poll(self):
         """Poll the Galaxy server for the dataset info and display it in the widget"""
+
         # If a Dataset ID is set, attempt to initialize from SessionList
         self.initialize(session.get(0))
 

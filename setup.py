@@ -38,6 +38,6 @@ setup(name='galahad',
           'ipywidgets>=8.0.0',
           'pandas',
       ],
-      data_files=[("share/jupyter/nbtools", ["nbtools/genepattern.json"])],
+      data_files=[("share/jupyter/nbtools", ["nbtools/galahad.json"])],
       normalize_version=False,
       )
