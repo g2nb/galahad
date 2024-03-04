@@ -16,7 +16,7 @@ class GalaxyDatasetWidget(UIOutput):
         self.set_color(kwargs)
         self.set_logo(kwargs)
         UIOutput.__init__(self, origin=self.dataset_origin(), **kwargs)
-        self.poll()  # Query the Galaxy server and begin polling, if needed
+        self.poll(**kwargs)  # Query the Galaxy server and begin polling, if needed
 
         # Register the event handler for Galaxy login
         EventManager.instance().register("galaxy.login", self.login_callback)
@@ -44,7 +44,7 @@ class GalaxyDatasetWidget(UIOutput):
         kwargs['logo'] = GALAXY_LOGO
         return kwargs['logo']
 
-    def poll(self):
+    def poll(self, **kwargs):
         """Poll the Galaxy server for the dataset info and display it in the widget"""
 
         # If a Dataset ID is set, attempt to initialize from SessionList
@@ -77,8 +77,8 @@ class GalaxyDatasetWidget(UIOutput):
             self.poll_if_needed()
         else:
             # Display error message if no initialized Dataset object is provided
-            self.name = 'Not Authenticated'
-            self.error = 'You must authenticate before the dataset can be displayed. After you authenticate it may take a few seconds for the information to appear.'
+            if 'name' not in kwargs: self.name = 'Not Authenticated'
+            if 'error' not in kwargs: self.error = 'You must authenticate before the dataset can be displayed. After you authenticate it may take a few seconds for the information to appear.'
 
     def poll_if_needed(self):
         """Begin a polling interval if the job is pending or running"""

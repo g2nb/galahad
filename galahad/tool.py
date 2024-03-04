@@ -1,8 +1,10 @@
 import inspect
+import json
 import os
 from IPython.display import display
-from .dataset import GalaxyDatasetWidget
+from bioblend import ConnectionError
 from nbtools import NBTool, UIBuilder, python_safe
+from .dataset import GalaxyDatasetWidget
 from .utils import GALAXY_LOGO, session_color, galaxy_url
 
 
@@ -25,9 +27,13 @@ class GalaxyToolWidget(UIBuilder):
         def submit_job(**kwargs):
             spec = GalaxyToolWidget.make_job_spec(tool, **kwargs)
             history = tool.gi.histories.list()[0]  # TODO: Fix in a way that supports non-default histories
-            datasets = tool.run(spec, history)
-            for dataset in datasets:
-                display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(tool.gi), secondary_color=True)))
+            try:
+                datasets = tool.run(spec, history)
+                for dataset in datasets:
+                    display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(tool.gi), secondary_color=True)))
+            except ConnectionError as e:
+                error = json.loads(e.body)['err_msg'] if hasattr(e, 'body') else f'Unknown error running Galaxy tool: {e}'
+                display(GalaxyDatasetWidget(None, logo='none', name='Galaxy Error', error=error, color=session_color(galaxy_url(tool.gi), secondary_color=True)))
 
         # Function for adding a parameter with a safe name
         def add_param(param_list, p):
@@ -102,13 +108,13 @@ class GalaxyToolWidget(UIBuilder):
             safe_name = python_safe(p['name'])
             spec[safe_name] = {}
             spec[safe_name]['name'] = GalaxyToolWidget.form_value(
-                GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'])
+                GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'] if 'label' in p else p['name'])
             )
             spec[safe_name]['default'] = GalaxyToolWidget.form_value(
-                GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides, p['value'])
+                GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides, p['value'] if 'value' in p else '')
             )
             spec[safe_name]['description'] = GalaxyToolWidget.form_value(
-                GalaxyToolWidget.override_if_set(safe_name, 'description', param_overrides, p['help'])
+                GalaxyToolWidget.override_if_set(safe_name, 'description', param_overrides, p['help'] if 'help' in p else '')
             )
             spec[safe_name]['optional'] = GalaxyToolWidget.override_if_set(safe_name, 'optional', param_overrides,
                                                                            p['optional'] if 'optional' in p else False)
