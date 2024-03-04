@@ -3,6 +3,7 @@ import json
 import os
 from IPython.display import display
 from bioblend import ConnectionError
+from bioblend.galaxy.objects import Tool
 from nbtools import NBTool, UIBuilder, python_safe
 from .dataset import GalaxyDatasetWidget
 from .utils import GALAXY_LOGO, session_color, galaxy_url
@@ -99,6 +100,16 @@ class GalaxyToolWidget(UIBuilder):
             return param_overrides[safe_name][attr]
         else: return param_val
 
+    @staticmethod
+    def value_strings(raw_values):
+        if isinstance(raw_values, dict):
+            if 'values' in raw_values and isinstance(raw_values['values'], list):
+                if not len(raw_values['values']): return []
+                elif 'id' in raw_values['values'][0]:
+                    return [v['id'] for v in raw_values['values']]
+        return str(raw_values)
+
+
     def create_param_spec(self, tool, kwargs):
         """Create the display spec for each parameter"""
         if tool is None: return {}  # Dummy function for null task
@@ -111,7 +122,8 @@ class GalaxyToolWidget(UIBuilder):
                 GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'] if 'label' in p else p['name'])
             )
             spec[safe_name]['default'] = GalaxyToolWidget.form_value(
-                GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides, p['value'] if 'value' in p else '')
+                GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides,
+                                                 GalaxyToolWidget.value_strings(p['value']) if 'value' in p else '')
             )
             spec[safe_name]['description'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'description', param_overrides, p['help'] if 'help' in p else '')
@@ -162,7 +174,9 @@ class GalaxyToolWidget(UIBuilder):
 
     def load_tool_inputs(self):
         if 'inputs' not in self.tool.wrapped:
-            self.tool = self.tool.gi.tools.get(self.tool.id, io_details=True)
+            tool_json = self.tool.gi.gi.tools.build(
+                tool_id=self.tool.id, history_id=self.tool.gi.gi.histories.get_most_recently_used_history()['id'])
+            self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
     def __init__(self, tool=None, origin='', id='', **kwargs):
         """Initialize the tool widget"""
@@ -194,12 +208,22 @@ class GalaxyToolWidget(UIBuilder):
         }
         ui_args = { **ui_args, **kwargs }                                   # Merge kwargs (allows overrides)
         UIBuilder.__init__(self, self.function_wrapper, **ui_args)          # Initiate the widget
+        self.attach_help_section()
 
     @staticmethod
     def form_value(raw_value):
         """Give the default parameter value in format the UI Builder expects"""
         if raw_value is not None: return raw_value
         else: return ''
+
+    def attach_help_section(self):
+        self.extra_menu_items = {**self.extra_menu_items, **{'Display Help': {
+                'action': 'method',
+                'code': 'display_help'
+            }}}
+
+    def display_help(self):
+        self.info = self.tool.wrapped['help']
 
 
 class GalaxyTool(NBTool):
