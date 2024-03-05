@@ -79,7 +79,7 @@ class GalaxyToolWidget(UIBuilder):
         elif task_param['type'] == 'integer':           param_spec['type'] = 'number'
         elif task_param['type'] == 'float':             param_spec['type'] = 'number'
         elif task_param['type'] == 'hidden_data':       param_spec['type'] = 'file'     # TODO: Verify
-        elif task_param['type'] == 'color':             param_spec['type'] = 'text'     # TODO: Implement color-picker
+        elif task_param['type'] == 'color':             param_spec['type'] = 'color'
         elif task_param['type'] == 'drill_down':        param_spec['type'] = 'choice'   # TODO: Verify
         else: param_spec['type'] = 'text'
 
