@@ -4,9 +4,9 @@ import os
 from IPython.display import display
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
-from nbtools import NBTool, UIBuilder, python_safe
+from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
 from .dataset import GalaxyDatasetWidget
-from .utils import GALAXY_LOGO, session_color, galaxy_url
+from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -150,14 +150,29 @@ class GalaxyToolWidget(UIBuilder):
 
     def generate_upload_callback(self):
         """Create an upload callback to pass to data inputs"""
-        # TODO: Implement for real
         def galaxy_upload_callback(values):
             try:
                 for k in values:
+                    # Get the full path in the workspace
                     path = os.path.realpath(k)
-                    dataset = self.tool.server_data.upload_file(k, path)
+
+                    # Get the history and upload to that history
+                    history = self.tool.gi.histories.list()[0]  # TODO: Use selected history
+                    dataset = history.upload_dataset(path)
+
+                    # Remove the uploaded file from the workspace
                     os.remove(path)
-                    return dataset.get_url()
+
+                    # Register the uploaded file with the data manager
+                    kind = dataset.wrapped['extension'] if 'extension' in dataset.wrapped else ''
+                    data = Data(origin=server_name(galaxy_url(self.tool.gi)), group=history.name, uri=dataset.id,
+                                label=dataset.name, kind=kind)
+                    def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
+                    DataManager.instance().data_widget(origin=data.origin, uri=data.uri,
+                                                       widget=create_dataset_lambda(dataset.id))
+                    DataManager.instance().register(data)
+
+                    return dataset.id
             except Exception as e:
                 self.error = f"Error encountered uploading file: {e}"
         return galaxy_upload_callback
@@ -175,6 +190,7 @@ class GalaxyToolWidget(UIBuilder):
     def load_tool_inputs(self):
         if 'inputs' not in self.tool.wrapped:
             tool_json = self.tool.gi.gi.tools.build(
+                # TODO: Use selected history
                 tool_id=self.tool.id, history_id=self.tool.gi.gi.histories.get_most_recently_used_history()['id'])
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
