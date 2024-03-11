@@ -148,7 +148,8 @@ class GalaxyToolWidget(UIBuilder):
     #                 group['parameters'][i] = python_safe(group['parameters'][i])
     #     return all_groups
 
-    def generate_upload_callback(self):
+    @staticmethod
+    def generate_upload_callback(session, widget):
         """Create an upload callback to pass to data inputs"""
         def galaxy_upload_callback(values):
             try:
@@ -157,7 +158,7 @@ class GalaxyToolWidget(UIBuilder):
                     path = os.path.realpath(k)
 
                     # Get the history and upload to that history
-                    history = self.tool.gi.histories.list()[0]  # TODO: Use selected history
+                    history = session.histories.list()[0]  # TODO: Use selected history
                     dataset = history.upload_dataset(path)
 
                     # Remove the uploaded file from the workspace
@@ -165,7 +166,7 @@ class GalaxyToolWidget(UIBuilder):
 
                     # Register the uploaded file with the data manager
                     kind = dataset.wrapped['extension'] if 'extension' in dataset.wrapped else ''
-                    data = Data(origin=server_name(galaxy_url(self.tool.gi)), group=history.name, uri=dataset.id,
+                    data = Data(origin=server_name(galaxy_url(session)), group=history.name, uri=dataset.id,
                                 label=dataset.name, kind=kind)
                     def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
                     DataManager.instance().data_widget(origin=data.origin, uri=data.uri,
@@ -174,7 +175,7 @@ class GalaxyToolWidget(UIBuilder):
 
                     return dataset.id
             except Exception as e:
-                self.error = f"Error encountered uploading file: {e}"
+                widget.error = f"Error encountered uploading file: {e}"
         return galaxy_upload_callback
 
     def handle_error_task(self, error_message, name='Galaxy Tool', **kwargs):
@@ -220,7 +221,7 @@ class GalaxyToolWidget(UIBuilder):
             # 'parameter_groups': GalaxyToolWidget.extract_parameter_groups(self.tool), # TODO: Support sections
             'parameters': self.parameter_spec,
             'subtitle': f'Version {tool.version}',
-            'upload_callback': self.generate_upload_callback(),
+            'upload_callback': self.generate_upload_callback(self.tool.gi, self),
         }
         ui_args = { **ui_args, **kwargs }                                   # Merge kwargs (allows overrides)
         UIBuilder.__init__(self, self.function_wrapper, **ui_args)          # Initiate the widget
@@ -252,3 +253,36 @@ class GalaxyTool(NBTool):
         self.name = tool.name
         self.description = tool.wrapped['description']
         self.load = lambda **kwargs: GalaxyToolWidget(tool, id=self.id, origin=self.origin, **kwargs)
+
+
+class GalaxyUploadTool(NBTool):
+    """Tool wrapper for Galaxy uploads"""
+
+    class GalaxyUploadWidget(UIBuilder):
+        def __init__(self, tool, session, **kwargs):
+            self.session = session
+            ui_args = {
+                'color': session_color(galaxy_url(session)),
+                'id': tool.id,
+                'logo': GALAXY_LOGO,
+                'origin': tool.origin,
+                'name': tool.name,
+                'description': tool.description,
+                'parameters': {'dataset': {'type': 'file', 'description': 'Select a file to upload to the Galaxy server'}},
+                'upload_callback': GalaxyToolWidget.generate_upload_callback(session, self),
+                **kwargs
+            }
+            UIBuilder.__init__(self, self.create_function_wrapper(), **ui_args)
+
+        def create_function_wrapper(self):
+            def upload_data(dataset):
+                display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(self.session), secondary_color=True)))
+            return upload_data
+
+    def __init__(self, server_name, session):
+        NBTool.__init__(self)
+        self.origin = server_name
+        self.id = 'data_upload_tool'
+        self.name = 'Upload Data'
+        self.description = 'Upload data files to Galaxy server'
+        self.load = lambda **kwargs: GalaxyUploadTool.GalaxyUploadWidget(self, session)

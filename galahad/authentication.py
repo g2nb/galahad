@@ -3,7 +3,7 @@ from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, D
 from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
-from .tool import GalaxyTool
+from .tool import GalaxyTool, GalaxyUploadTool
 from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url
 
 REGISTER_EVENT = """
@@ -98,6 +98,7 @@ class GalaxyAuthWidget(UIBuilder):
         """Get the list available tools and register widgets for them with the tool manager"""
         server = server_name(galaxy_url(self.session))
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in self.session.tools.list()]
+        tools.append(GalaxyUploadTool(server, self.session))
         ToolManager.instance().register_all(tools)
 
     def register_history(self):
