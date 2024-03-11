@@ -124,6 +124,7 @@ class GalaxyAuthWidget(UIBuilder):
         """Dispatch a login event after authentication"""
         self.info = "Successfully logged into Galaxy"
         EventManager.instance().dispatch("galaxy.login", self.session)
+        EventManager.instance().dispatch("nbtools.refresh_data", None)
 
 
 class AuthenticationTool(NBTool):
