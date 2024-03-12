@@ -90,9 +90,18 @@ class GalaxyToolWidget(UIBuilder):
         if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
         if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
         if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
-        if 'options' in task_param: param_spec['choices'] = { c[0]: c[1] for c in task_param['options'] }
-        # TODO: Implement min/max support - especially for numbers
+        if 'options' in task_param: param_spec['choices'] = GalaxyToolWidget.options_spec(task_param['options'])
+
         # TODO: Implement dynamic refresh for certain types (drill_down, data_column, etc.)
+
+    @staticmethod
+    def options_spec(options):
+        if isinstance(options, list): return { c[0]: c[1] for c in options }
+        else:
+            choices = {}
+            for l in options.values():
+                for i in l: choices[i['name']] = i['id']
+            return choices
 
     @staticmethod
     def override_if_set(safe_name, attr, param_overrides, param_val):
