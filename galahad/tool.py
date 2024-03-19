@@ -98,9 +98,9 @@ class GalaxyToolWidget(UIBuilder):
             param_spec['choices'] = {'Yes': 'True', 'No': 'False'}
 
         # Special case for multi-value select inputs
-        if task_param['type'] == 'select' and 'multiple' in task_param and task_param['multiple']:
+        if param_spec['type'] == 'choice' and param_spec.get('multiple'):
             if isinstance(param_spec['default'], str): param_spec['default'] = literal_eval(param_spec['default'])
-            if param_spec['default'] is None: param_spec['default'] = []
+            if param_spec['default'] is None or param_spec['default'] == 'None': param_spec['default'] = []
 
         # TODO: Implement dynamic refresh for certain types (drill_down, data_column, etc.)
 
