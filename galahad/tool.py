@@ -102,6 +102,18 @@ class GalaxyToolWidget(UIBuilder):
             if isinstance(param_spec['default'], str): param_spec['default'] = literal_eval(param_spec['default'])
             if param_spec['default'] is None or param_spec['default'] == 'None': param_spec['default'] = []
 
+        # TODO: Notes on parameter support
+        #   drill_down: Works, but not particularly useful without dynamic refresh support
+        #   hidden_data: Appears to be fine, but not testable as it only is used in the cufflinks tool, which
+        #       won't run without "conditional" parameter support.
+        #   data_column: Works, but not as useful without dynamic refresh support
+        #   rules: Entirely unsupported. Looks complicated to implement. Only used in "Apply rules" tool.
+        #   data_collection: Works. Tested with "Unzip collection" tool.
+        #   directory_uri: Entirely unsupported. Looks complicated to implement. Only used in "Export datasets" tool.
+        #   boolean: Works.
+        #   genomebuild: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
+        #   upload_dataset: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
+
         # TODO: Implement dynamic refresh for certain types (drill_down, data_column, etc.)
 
     @staticmethod
@@ -137,7 +149,7 @@ class GalaxyToolWidget(UIBuilder):
             safe_name = python_safe(p['name'])
             spec[safe_name] = {}
             spec[safe_name]['name'] = GalaxyToolWidget.form_value(
-                GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'] if 'label' in p else p['name'])
+                GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'] if p.get('label') else p['name'])
             )
             spec[safe_name]['default'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides,
