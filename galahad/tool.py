@@ -7,7 +7,7 @@ from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
 from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
 from .dataset import GalaxyDatasetWidget
-from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name
+from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -183,13 +183,14 @@ class GalaxyToolWidget(UIBuilder):
                     os.remove(path)
 
                     # Register the uploaded file with the data manager
-                    kind = dataset.wrapped['extension'] if 'extension' in dataset.wrapped else ''
+                    kind = 'error' if dataset.state == 'error' else (dataset.wrapped['extension'] if 'extension' in dataset.wrapped else '')
                     data = Data(origin=server_name(galaxy_url(session)), group=history.name, uri=dataset.id,
-                                label=dataset.name, kind=kind)
+                                label=dataset.name, kind=kind, icon=data_icon(dataset.state))
                     def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
                     DataManager.instance().data_widget(origin=data.origin, uri=data.uri,
                                                        widget=create_dataset_lambda(dataset.id))
                     DataManager.instance().register(data)
+                    poll_data_and_update(dataset)
 
                     return dataset.id
             except Exception as e:

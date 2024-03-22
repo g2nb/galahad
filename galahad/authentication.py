@@ -4,7 +4,7 @@ from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool, GalaxyUploadTool
-from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url
+from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -114,11 +114,13 @@ class GalaxyAuthWidget(UIBuilder):
             # Add data entries for all output files
             for content in history.content_infos:
                 if content.wrapped['deleted']: continue
-                kind = content.wrapped['extension'] if 'extension' in content.wrapped else ''
-                data = Data(origin=origin, group=history.name, uri=content.id, label=content.name, kind=kind)
+                kind = 'error' if content.state == 'error' else (content.wrapped['extension'] if 'extension' in content.wrapped else '')
+                data = Data(origin=origin, group=history.name, uri=content.id, label=content.name, kind=kind, icon=data_icon(content.state))
                 DataManager.instance().data_widget(origin=data.origin, uri=data.uri, widget=create_dataset_lambda(content.id))
                 data_list.append(data)
+                poll_data_and_update(content)
         DataManager.instance().register_all(data_list)
+
 
     def trigger_login(self):
         """Dispatch a login event after authentication"""

@@ -1,3 +1,6 @@
+from threading import Timer
+from nbtools import ToolManager, DataManager
+
 GALAXY_SERVERS = {
     'Galaxy Main': 'https://usegalaxy.org',
     'Galaxy EU': 'https://usegalaxy.eu',
@@ -37,3 +40,30 @@ def session_color(index=0, secondary_color=False):
         for i in range(len(servers)):
             if index == servers[i]: return color_string(*GALAXY_COLORS[i], secondary_color)
         return color_string(*GALAXY_COLORS[-1], secondary_color)
+
+
+def data_icon(status):
+    if status == 'ok': return 'far fa-check-circle'
+    elif status == 'error': return 'fas fa-exclamation-circle'
+    elif status == 'new': return 'far fa-clock'
+    elif status == 'running': return 'far fa-clock'
+    else: return None
+
+
+def poll_data_and_update(dataset):
+    if dataset.state == 'new' or dataset.state == 'running':
+        initial_state = dataset.state
+
+        def update_registry():
+            if dataset.state != initial_state:
+                origin = server_name(galaxy_url(dataset.gi))
+                uri = dataset.id
+                data = DataManager.instance().get(origin=origin, uri=uri)
+                if data:
+                    data.icon = data_icon(dataset.state)
+                    if dataset.state == 'error': data.kind = 'error'
+                    ToolManager.instance().send_update()
+            poll_data_and_update(dataset)
+
+        timer = Timer(15.0, lambda: dataset.refresh() and update_registry())
+        timer.start()

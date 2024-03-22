@@ -1,9 +1,9 @@
 from threading import Timer
 from bioblend import ConnectionError
 from bioblend.galaxy.objects.wrappers import Dataset, HistoryDatasetAssociation
-from nbtools import UIOutput, EventManager, ToolManager
+from nbtools import UIOutput, EventManager, ToolManager, DataManager, Data
 from .sessions import session
-from .utils import GALAXY_LOGO, server_name, session_color, galaxy_url
+from .utils import GALAXY_LOGO, server_name, session_color, galaxy_url, data_icon, poll_data_and_update
 
 
 class GalaxyDatasetWidget(UIOutput):
@@ -43,6 +43,24 @@ class GalaxyDatasetWidget(UIOutput):
         # Otherwise, set the logo
         kwargs['logo'] = GALAXY_LOGO
         return kwargs['logo']
+
+    def register_data(self, group=None):
+        """Overrides base UIOutput method in order to pass icon to Data objects"""
+        group = self.name if group is None else group
+        if len(self.files):
+            all_data = []
+            for f in self.files:
+                if isinstance(f, tuple) or isinstance(f, list):  # Handle (uri, label, kind) tuples
+                    kwargs = {}
+                    if len(f) >= 1: kwargs['uri'] = f[0]
+                    else: raise Exception('Empty tuple or list passed to UIOutput.files')
+                    if len(f) >= 2: kwargs['label'] = f[1]
+                    if len(f) >= 3: kwargs['kind'] = ('error' if self.dataset.state == 'error' else f[2])
+                    all_data.append(Data(origin=self.origin, group=group, icon=data_icon(self.dataset.state), **kwargs))
+                else: all_data.append(Data(origin=self.origin, group=group, icon=data_icon(self.dataset.state), uri=f))
+                DataManager.instance().group_widget(origin=self.origin, group=group, widget=self)
+            DataManager.instance().register_all(all_data)
+            poll_data_and_update(self.dataset)
 
     def poll(self, **kwargs):
         """Poll the Galaxy server for the dataset info and display it in the widget"""
