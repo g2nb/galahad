@@ -67,3 +67,8 @@ def poll_data_and_update(dataset):
 
         timer = Timer(15.0, lambda: dataset.refresh() and update_registry())
         timer.start()
+
+
+def current_history(session):
+    if hasattr(session, 'current_history') and session.current_history: return session.current_history
+    else: return session.histories.list(deleted=False)[0]

@@ -7,7 +7,7 @@ from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
 from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
 from .dataset import GalaxyDatasetWidget
-from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update
+from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update, current_history
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -27,7 +27,7 @@ class GalaxyToolWidget(UIBuilder):
         # Function for submitting a new Galaxy job based on the task form
         def submit_job(**kwargs):
             spec = GalaxyToolWidget.make_job_spec(self.tool, **kwargs)
-            history = self.tool.gi.histories.list()[0]  # TODO: Fix in a way that supports non-default histories
+            history = current_history(self.tool.gi)
             try:
                 datasets = self.tool.run(spec, history)
                 for dataset in datasets:
@@ -176,7 +176,7 @@ class GalaxyToolWidget(UIBuilder):
                     path = os.path.realpath(k)
 
                     # Get the history and upload to that history
-                    history = session.histories.list()[0]  # TODO: Use selected history
+                    history = current_history(session)
                     dataset = history.upload_dataset(path)
 
                     # Remove the uploaded file from the workspace
@@ -211,7 +211,7 @@ class GalaxyToolWidget(UIBuilder):
         if 'inputs' not in self.tool.wrapped:
             tool_json = self.tool.gi.gi.tools.build(
                 # TODO: Use selected history
-                tool_id=self.tool.id, history_id=self.tool.gi.gi.histories.get_most_recently_used_history()['id'])
+                tool_id=self.tool.id, history_id=current_history(self.tool.gi).id)
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
     def __init__(self, tool=None, origin='', id='', **kwargs):

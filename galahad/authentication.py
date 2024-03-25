@@ -1,5 +1,6 @@
 from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
+from IPython.display import display
 from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
@@ -76,12 +77,24 @@ class GalaxyAuthWidget(UIBuilder):
     def replace_widget(self):
         """Replace the unauthenticated widget with the authenticated mode"""
         self.form.form.children[2].value = ''        # Blank password so it doesn't get serialized
-        self.form.collapsed = True
-        self.form.name = self.session.gi.email
-        self.form.subtitle = galaxy_url(self.session)
-        self.form.display_header=False
-        self.form.display_footer=False
-        self.form.form.children = []
+
+        history_widget = UIBuilder(lambda history: None, name=self.session.gi.email, subtitle=galaxy_url(self.session),
+            display_header=False, display_footer=False, logo=GALAXY_LOGO, color=session_color(), parameters={
+                'history': {
+                    'label': 'History',
+                    'type': 'choice',
+                    'description': 'Select a Galaxy history to use',
+                    'choices': {h.name: h.id for h in self.session.histories.list(deleted=False)},
+                    'optional': True
+                }
+        })
+        display(history_widget)
+
+        def change_history(change):
+            self.session.current_history = self.session.histories.get(history_widget.form.form.children[0].input.value)
+
+        history_widget.form.form.children[0].input.observe(change_history)
+        self.form.close()
 
     def prepare_session(self):
         """Prepare a valid session by registering the session and tools"""
@@ -121,10 +134,8 @@ class GalaxyAuthWidget(UIBuilder):
                 poll_data_and_update(content)
         DataManager.instance().register_all(data_list)
 
-
     def trigger_login(self):
         """Dispatch a login event after authentication"""
-        self.info = "Successfully logged into Galaxy"
         EventManager.instance().dispatch("galaxy.login", self.session)
         EventManager.instance().dispatch("nbtools.refresh_data", None)
 
