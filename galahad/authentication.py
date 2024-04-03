@@ -5,7 +5,8 @@ from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool, GalaxyUploadTool
-from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update
+from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update, \
+    skip_tool
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -110,7 +111,8 @@ class GalaxyAuthWidget(UIBuilder):
     def register_tools(self):
         """Get the list available tools and register widgets for them with the tool manager"""
         server = server_name(galaxy_url(self.session))
-        tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in self.session.tools.list()]
+        safe_tools = [galaxy_tool for galaxy_tool in self.session.tools.list() if not skip_tool(galaxy_tool)]
+        tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in safe_tools]
         tools.append(GalaxyUploadTool(server, self.session))
         ToolManager.instance().register_all(tools)
 

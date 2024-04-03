@@ -6,6 +6,8 @@ from ast import literal_eval
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
 from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
+from nbtools.uibuilder import UIBuilderBase
+
 from .dataset import GalaxyDatasetWidget
 from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update, current_history
 
@@ -56,6 +58,7 @@ class GalaxyToolWidget(UIBuilder):
 
     @staticmethod
     def make_job_spec(tool, **kwargs):
+        # TODO: This needs fixed to support sub-parameters
         for i in tool.wrapped['inputs']:
             if i['type'] == 'data':
                 id = kwargs[i['name']]
@@ -65,23 +68,23 @@ class GalaxyToolWidget(UIBuilder):
     def add_type_spec(self, task_param, param_spec):
         if   task_param['type'] == 'select':            param_spec['type'] = 'choice'
         elif task_param['type'] == 'hidden':            param_spec['type'] = 'text'
-        elif task_param['type'] == 'upload_dataset':    param_spec['type'] = 'file'     # TODO: Verify
-        elif task_param['type'] == 'genomebuild':       param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'upload_dataset':    param_spec['type'] = 'file'
+        elif task_param['type'] == 'genomebuild':       param_spec['type'] = 'choice'
         elif task_param['type'] == 'conditional':       param_spec['type'] = 'text'     # TODO: Implement sub-parameters
         elif task_param['type'] == 'baseurl':           param_spec['type'] = 'text'
-        elif task_param['type'] == 'data':              param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'data':              param_spec['type'] = 'file'
         elif task_param['type'] == 'text':              param_spec['type'] = 'text'
-        elif task_param['type'] == 'boolean':           param_spec['type'] = 'choice'   # TODO: Verify
-        elif task_param['type'] == 'directory_uri':     param_spec['type'] = 'text'     # TODO: Verify
-        elif task_param['type'] == 'data_collection':   param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'boolean':           param_spec['type'] = 'choice'
+        elif task_param['type'] == 'directory_uri':     param_spec['type'] = 'text'
+        elif task_param['type'] == 'data_collection':   param_spec['type'] = 'file'
         elif task_param['type'] == 'repeat':            param_spec['type'] = 'text'     # TODO: Implement sub-parameters
-        elif task_param['type'] == 'rules':             param_spec['type'] = 'text'     # TODO: Verify
-        elif task_param['type'] == 'data_column':       param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'rules':             param_spec['type'] = 'text'
+        elif task_param['type'] == 'data_column':       param_spec['type'] = 'choice'
         elif task_param['type'] == 'integer':           param_spec['type'] = 'number'
         elif task_param['type'] == 'float':             param_spec['type'] = 'number'
-        elif task_param['type'] == 'hidden_data':       param_spec['type'] = 'file'     # TODO: Verify
+        elif task_param['type'] == 'hidden_data':       param_spec['type'] = 'file'
         elif task_param['type'] == 'color':             param_spec['type'] = 'color'
-        elif task_param['type'] == 'drill_down':        param_spec['type'] = 'choice'   # TODO: Verify
+        elif task_param['type'] == 'drill_down':        param_spec['type'] = 'choice'
         else: param_spec['type'] = 'text'
 
         # Set parameter attributes
@@ -114,8 +117,6 @@ class GalaxyToolWidget(UIBuilder):
         #   genomebuild: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
         #   upload_dataset: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
 
-        # TODO: Implement dynamic refresh for certain types (drill_down, data_column, etc.)
-
     @staticmethod
     def options_spec(options):
         if isinstance(options, list): return { c[0]: c[1] for c in options }
@@ -144,7 +145,7 @@ class GalaxyToolWidget(UIBuilder):
         """Create the display spec for each parameter"""
         if self.tool is None or self.tool.gi is None or self.all_params is None: return {}  # Dummy function for null task
         spec = {}
-        param_overrides = kwargs.pop('parameters', None)
+        param_overrides = kwargs.get('parameters', None)
         for p in self.all_params:
             safe_name = python_safe(p['name'])
             spec[safe_name] = {}
@@ -210,7 +211,6 @@ class GalaxyToolWidget(UIBuilder):
     def load_tool_inputs(self):
         if 'inputs' not in self.tool.wrapped:
             tool_json = self.tool.gi.gi.tools.build(
-                # TODO: Use selected history
                 tool_id=self.tool.id, history_id=current_history(self.tool.gi).id)
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
@@ -220,6 +220,7 @@ class GalaxyToolWidget(UIBuilder):
         self.kwargs = kwargs
         if tool and origin is None: origin = galaxy_url(tool.gi)
         if tool and id is None: id = tool.id
+        self.origin = origin
 
         # Set the right look and error message if tool is None
         if self.tool is None or self.tool.gi is None:
@@ -231,21 +232,37 @@ class GalaxyToolWidget(UIBuilder):
         self.function_wrapper = self.create_function_wrapper(self.all_params)   # Build the function wrapper
         self.parameter_spec = self.create_param_spec(kwargs)                    # Create the parameter spec
         self.session_color = session_color(galaxy_url(tool.gi))                 # Set the session color
-        ui_args = {                                                             # Assemble keyword arguments
+        self.ui_args = self.create_ui_args(kwargs)                              # Merge kwargs (allows overrides)
+        UIBuilder.__init__(self, self.function_wrapper, **self.ui_args)         # Initiate the widget
+        self.attach_refresh_callbacks()
+        self.attach_help_section()
+
+    def attach_refresh_callbacks(self):
+        def update_generator(i):
+            key = self.all_params[i]['name']
+            def update_form(change):
+                value = None
+                if not isinstance(change['new'], str) and change['new'].get('value'): value = change['new'].get('value')
+                if value: self.dynamic_update({key: value})
+            return update_form
+
+        for i in range(len(self.all_params)):
+            if self.all_params[i].get('refresh_on_change', False):
+                self.form.form.kwargs_widgets[i].input.observe(update_generator(i))
+
+    def create_ui_args(self, kwargs):
+        ui_args = {  # Assemble keyword arguments
             'color': self.session_color,
             'id': id,
             'logo': GALAXY_LOGO,
-            'origin': origin,
-            'name': tool.name,
-            'description': tool.wrapped['description'],
-            'parameter_groups': self.parameter_groups,
+            'origin': self.origin,
+            'name': self.tool.name,
+            'description': self.tool.wrapped['description'],
             'parameters': self.parameter_spec,
-            'subtitle': f'Version {tool.version}',
+            'subtitle': f'Version {self.tool.version}',
             'upload_callback': self.generate_upload_callback(self.tool.gi, self),
         }
-        ui_args = { **ui_args, **kwargs }                                   # Merge kwargs (allows overrides)
-        UIBuilder.__init__(self, self.function_wrapper, **ui_args)          # Initiate the widget
-        self.attach_help_section()
+        return {**ui_args, **kwargs, 'parameters': self.parameter_spec}
 
     def expand_sections(self, inputs=None):
         if not self.tool or not self.tool.wrapped or 'inputs' not in self.tool.wrapped: return [], []
@@ -269,6 +286,42 @@ class GalaxyToolWidget(UIBuilder):
                 })
             else: params.append(p)
         return groups, params
+
+    def dynamic_update(self, overrides={}):
+        self.form.busy = True
+
+        # Get the form's current values
+        values = [p.get_interact_value() for p in self.form.form.kwargs_widgets]
+        keys = [p['name'] for p in self.all_params]
+        spec = {keys[i]: values[i] for i in range(len(keys))}
+        spec = {**spec, **overrides}
+
+        self.overrides = overrides
+        self.spec = spec
+
+        # Put the dataset values in the expected format
+        spec = GalaxyToolWidget.make_job_spec(self.tool, **spec)
+
+        self.final_spec = spec
+
+        # Update the Galaxy Tool model
+        tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)
+        self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
+
+        # Build the new function wrapper
+        self.parameter_groups, self.all_params = self.expand_sections()         # List groups and compile all params
+        self.function_wrapper = self.create_function_wrapper(self.all_params)   # Build the function wrapper
+        self.parameter_spec = self.create_param_spec(self.kwargs)               # Create the parameter spec
+        self.ui_args = self.create_ui_args(self.kwargs)                         # Merge kwargs (allows overrides)
+
+        # Insert the newly generated widgets into the display
+        self.form = UIBuilderBase(self.function_wrapper, _parent=self, **self.ui_args)
+        self.output = self.form.output
+        self.children = [self.form, self.output]
+
+        # Attach the dynamic refresh callbacks to the new form
+        self.attach_refresh_callbacks()
+        self.form.busy = False
 
     @staticmethod
     def form_value(raw_value):

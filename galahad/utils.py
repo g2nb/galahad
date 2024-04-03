@@ -72,3 +72,7 @@ def poll_data_and_update(dataset):
 def current_history(session):
     if hasattr(session, 'current_history') and session.current_history: return session.current_history
     else: return session.histories.list(deleted=False)[0]
+
+
+def skip_tool(tool):
+    return tool.name in ['Data Fetch', 'Export datasets', 'Apply rules', 'Upload File']
