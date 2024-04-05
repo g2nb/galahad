@@ -28,7 +28,7 @@ class GalaxyToolWidget(UIBuilder):
 
         # Function for submitting a new Galaxy job based on the task form
         def submit_job(**kwargs):
-            spec = GalaxyToolWidget.make_job_spec(self.tool, **kwargs)
+            spec = self.make_job_spec(self.tool, **kwargs)
             history = current_history(self.tool.gi)
             try:
                 datasets = self.tool.run(spec, history)
@@ -56,10 +56,8 @@ class GalaxyToolWidget(UIBuilder):
 
         return submit_job
 
-    @staticmethod
-    def make_job_spec(tool, **kwargs):
-        # TODO: This needs fixed to support sub-parameters
-        for i in tool.wrapped['inputs']:
+    def make_job_spec(self, tool, **kwargs):
+        for i in self.all_params:
             if i['type'] == 'data':
                 id = kwargs[i['name']]
                 kwargs[i['name']] = {'id': id, 'src': 'hda'}
@@ -300,7 +298,7 @@ class GalaxyToolWidget(UIBuilder):
         self.spec = spec
 
         # Put the dataset values in the expected format
-        spec = GalaxyToolWidget.make_job_spec(self.tool, **spec)
+        spec = self.make_job_spec(self.tool, **spec)
 
         self.final_spec = spec
 
