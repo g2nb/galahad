@@ -68,7 +68,7 @@ class GalaxyToolWidget(UIBuilder):
         elif task_param['type'] == 'hidden':            param_spec['type'] = 'text'
         elif task_param['type'] == 'upload_dataset':    param_spec['type'] = 'file'
         elif task_param['type'] == 'genomebuild':       param_spec['type'] = 'choice'
-        elif task_param['type'] == 'conditional':       param_spec['type'] = 'text'     # TODO: Implement sub-parameters
+        # elif task_param['type'] == 'conditional':  # Conditional parameters should be called here
         elif task_param['type'] == 'baseurl':           param_spec['type'] = 'text'
         elif task_param['type'] == 'data':              param_spec['type'] = 'file'
         elif task_param['type'] == 'text':              param_spec['type'] = 'text'
@@ -102,18 +102,6 @@ class GalaxyToolWidget(UIBuilder):
         if param_spec['type'] == 'choice' and param_spec.get('multiple'):
             if isinstance(param_spec['default'], str): param_spec['default'] = literal_eval(param_spec['default'])
             if param_spec['default'] is None or param_spec['default'] == 'None': param_spec['default'] = []
-
-        # TODO: Notes on parameter support
-        #   drill_down: Works, but not particularly useful without dynamic refresh support
-        #   hidden_data: Appears to be fine, but not testable as it only is used in the cufflinks tool, which
-        #       won't run without "conditional" parameter support.
-        #   data_column: Works, but not as useful without dynamic refresh support
-        #   rules: Entirely unsupported. Looks complicated to implement. Only used in "Apply rules" tool.
-        #   data_collection: Works. Tested with "Unzip collection" tool.
-        #   directory_uri: Entirely unsupported. Looks complicated to implement. Only used in "Export datasets" tool.
-        #   boolean: Works.
-        #   genomebuild: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
-        #   upload_dataset: Unknown. Only used in "Data Fetch" tool, which doesns't appear in usegalaxy.org UI.
 
     @staticmethod
     def options_spec(options):
@@ -232,21 +220,45 @@ class GalaxyToolWidget(UIBuilder):
         self.session_color = session_color(galaxy_url(tool.gi))                 # Set the session color
         self.ui_args = self.create_ui_args(kwargs)                              # Merge kwargs (allows overrides)
         UIBuilder.__init__(self, self.function_wrapper, **self.ui_args)         # Initiate the widget
-        self.attach_refresh_callbacks()
+        self.attach_interactive_callbacks()
         self.attach_help_section()
 
-    def attach_refresh_callbacks(self):
-        def update_generator(i):
+    def attach_interactive_callbacks(self):
+        def dynamic_update_generator(i):
+            """Dynamic Parameter Callback"""
             key = self.all_params[i]['name']
             def update_form(change):
                 value = None
-                if not isinstance(change['new'], str) and change['new'].get('value'): value = change['new'].get('value')
+                if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
+                # if not isinstance(change['new'], str) and change['new'].get('value'): value = change['new'].get('value')
                 if value: self.dynamic_update({key: value})
             return update_form
 
+        def conditional_update_generator(i):
+            """Conditional Parameter Callback"""
+            conditional_name = self.all_params[i]['name']
+            def conditional_form(change):
+                for j in range(len(self.all_params)):
+                    if self.all_params[j].get('conditional_param') == conditional_name:
+                        if self.valid_value(self.all_params[i]['name'], change['new']):
+                            if change['new'] == self.all_params[j].get('conditional_display'):
+                                self.form.form.kwargs_widgets[j].layout.display = None      # Show
+                            else: self.form.form.kwargs_widgets[j].layout.display = 'none'  # Hide
+            return conditional_form
+
+        # Handle conditional parameters
         for i in range(len(self.all_params)):
+            if self.all_params[i].get('conditional_test'):
+                self.form.form.kwargs_widgets[i].input.observe(conditional_update_generator(i))
+                continue
+
+            # Handle dynamic parameters
             if self.all_params[i].get('refresh_on_change', False):
-                self.form.form.kwargs_widgets[i].input.observe(update_generator(i))
+                self.form.form.kwargs_widgets[i].input.observe(dynamic_update_generator(i))
+
+    def valid_value(self, name, value):
+        values = self.parameter_spec[name].get('choices', {}).values()
+        return value in values
 
     def create_ui_args(self, kwargs):
         ui_args = {  # Assemble keyword arguments
@@ -257,6 +269,7 @@ class GalaxyToolWidget(UIBuilder):
             'name': self.tool.name,
             'description': self.tool.wrapped['description'],
             'parameters': self.parameter_spec,
+            'parameter_groups': self.parameter_groups,
             'subtitle': f'Version {self.tool.version}',
             'upload_callback': self.generate_upload_callback(self.tool.gi, self),
         }
@@ -269,7 +282,7 @@ class GalaxyToolWidget(UIBuilder):
         groups = []
         params = []
         for p in inputs:
-            # TODO: Add support for conditional and repeat params
+            # TODO: Add support for repeat params
             if p['type'] == 'section':
                 if 'inputs' in p:
                     section_groups, section_params = self.expand_sections(p['inputs'])
@@ -280,7 +293,27 @@ class GalaxyToolWidget(UIBuilder):
                     'name': p['label'] if 'label' in p else (p['title'] if 'title' in p else p['name']),
                     'description': p['help'] if 'help' in p else '',
                     'hidden': (not p['expanded']) if 'expanded' in p else False,
-                    'parameters': [i['name'] for i in p['inputs']]  # [(python_safe(i['label']) if 'label' in i else python_safe(i['name'])) for i in p['inputs']]
+                    'parameters': [i['name'] for i in p['inputs']]
+                })
+            elif p['type'] == 'conditional':
+                p['test_param']['conditional_test'] = True
+                conditional_groups = []
+                conditional_params = [p['test_param']]
+                for case in p['cases']:
+                    case_groups, case_params = [], case['inputs']
+                    for cp in case_params:
+                        cp['conditional_display'] = case['value']
+                        cp['conditional_param'] = p['test_param']['name']
+                    conditional_groups += case_groups
+                    conditional_params += case_params
+                groups += conditional_groups
+                params += conditional_params
+
+                groups.append({
+                    'name': p['test_param'].get('label', p['test_param']['name']),
+                    'description': p['test_param'].get('help', ''),
+                    'hidden': p['test_param'].get('hidden', False),
+                    'parameters': [c['name'] for c in conditional_params]
                 })
             else: params.append(p)
         return groups, params
@@ -318,7 +351,7 @@ class GalaxyToolWidget(UIBuilder):
         self.children = [self.form, self.output]
 
         # Attach the dynamic refresh callbacks to the new form
-        self.attach_refresh_callbacks()
+        self.attach_interactive_callbacks()
         self.form.busy = False
 
     @staticmethod
