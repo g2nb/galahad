@@ -140,7 +140,7 @@ class GalaxyToolWidget(UIBuilder):
             )
             spec[safe_name]['default'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides,
-                                                 GalaxyToolWidget.value_strings(p['value']) if 'value' in p else '')
+                                                 GalaxyToolWidget.value_strings(p.get('value', '') if p.get('value') else ''))
             )
             spec[safe_name]['description'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'description', param_overrides, p['help'] if 'help' in p else '')
