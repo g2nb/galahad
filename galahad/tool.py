@@ -1,15 +1,16 @@
 import inspect
 import json
 import os
+from urllib.parse import unquote
 from IPython.display import display
-from ast import literal_eval
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
 from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
 from nbtools.uibuilder import UIBuilderBase
 
 from .dataset import GalaxyDatasetWidget
-from .utils import GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update, current_history
+from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
+                    current_history, limited_eval)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -56,8 +57,29 @@ class GalaxyToolWidget(UIBuilder):
 
         return submit_job
 
+    @staticmethod
+    def nested_param_name(raw):
+        return unquote(raw.replace('___', '|'))
+
+    @staticmethod
+    def is_excluded(param, kwargs):
+        if param.get('conditional_display') is None: return False
+        if kwargs.get(param['conditional_param']) != param['conditional_display']: return True
+        else: return False
+
     def make_job_spec(self, tool, **kwargs):
         for i in self.all_params:
+            # Fix parameter names to expected Galaxy values
+            nested_name = GalaxyToolWidget.nested_param_name(i['name'])
+            if i['name'] != nested_name:
+                kwargs[nested_name] = kwargs[i['name']]
+                del kwargs[i['name']]
+
+            # Remove non-selected conditional sub-parameters
+            if GalaxyToolWidget.is_excluded(i, kwargs):
+                del kwargs[nested_name]
+
+            # Prepare data parameters
             if i['type'] == 'data':
                 id = kwargs[i['name']]
                 kwargs[i['name']] = {'id': id, 'src': 'hda'}
@@ -100,7 +122,7 @@ class GalaxyToolWidget(UIBuilder):
 
         # Special case for multi-value select inputs
         if param_spec['type'] == 'choice' and param_spec.get('multiple'):
-            if isinstance(param_spec['default'], str): param_spec['default'] = literal_eval(param_spec['default'])
+            if isinstance(param_spec['default'], str): param_spec['default'] = limited_eval(param_spec['default'])
             if param_spec['default'] is None or param_spec['default'] == 'None': param_spec['default'] = []
 
     @staticmethod
@@ -277,7 +299,7 @@ class GalaxyToolWidget(UIBuilder):
 
     def expand_sections(self, inputs=None):
         if not self.tool or not self.tool.wrapped or 'inputs' not in self.tool.wrapped: return [], []
-        if not inputs: inputs = self.tool.wrapped['inputs']
+        if inputs is None: inputs = self.tool.wrapped['inputs']
 
         groups = []
         params = []
@@ -300,10 +322,12 @@ class GalaxyToolWidget(UIBuilder):
                 conditional_groups = []
                 conditional_params = [p['test_param']]
                 for case in p['cases']:
-                    case_groups, case_params = [], case['inputs']
+                    case_groups, case_params = self.expand_sections(case['inputs'])
                     for cp in case_params:
+                        cp['name'] = f"{p['name']}___{cp['name']}"
                         cp['conditional_display'] = case['value']
                         cp['conditional_param'] = p['test_param']['name']
+                        cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
                     conditional_groups += case_groups
                     conditional_params += case_params
                 groups += conditional_groups
@@ -332,8 +356,6 @@ class GalaxyToolWidget(UIBuilder):
 
         # Put the dataset values in the expected format
         spec = self.make_job_spec(self.tool, **spec)
-
-        self.final_spec = spec
 
         # Update the Galaxy Tool model
         tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)

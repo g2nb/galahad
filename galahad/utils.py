@@ -76,3 +76,20 @@ def current_history(session):
 
 def skip_tool(tool):
     return tool.name in ['Data Fetch', 'Export datasets', 'Apply rules', 'Upload File']
+
+
+def limited_eval(raw):
+    # Value is a boolean
+    if   raw.lower() == 'true': return True
+    elif raw.lower() == 'false': return False
+
+    # Value is an int
+    try: return int(raw)
+    except ValueError: pass
+
+    # Value is a float
+    try: return float(raw)
+    except ValueError: pass
+
+    # Value is a string
+    return raw
