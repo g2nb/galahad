@@ -1,7 +1,7 @@
 import inspect
 import json
 import os
-from urllib.parse import unquote
+from copy import deepcopy
 from IPython.display import display
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool
@@ -59,7 +59,7 @@ class GalaxyToolWidget(UIBuilder):
 
     @staticmethod
     def nested_param_name(raw):
-        return unquote(raw.replace('___', '|'))
+        return raw.split('____')[0].replace('___', '|')
 
     @staticmethod
     def is_excluded(param, kwargs):
@@ -76,13 +76,15 @@ class GalaxyToolWidget(UIBuilder):
                 del kwargs[i['name']]
 
             # Remove non-selected conditional sub-parameters
-            if GalaxyToolWidget.is_excluded(i, kwargs):
-                del kwargs[nested_name]
+            if GalaxyToolWidget.is_excluded(i, kwargs): del kwargs[nested_name]
+
+            # Remove repeat parent parameters
+            if i['type'] == 'repeat': del kwargs[nested_name]
 
             # Prepare data parameters
             if i['type'] == 'data':
-                id = kwargs[i['name']]
-                kwargs[i['name']] = {'id': id, 'src': 'hda'}
+                id = kwargs[nested_name]
+                kwargs[nested_name] = {'id': id, 'src': 'hda'}
         return kwargs
 
     def add_type_spec(self, task_param, param_spec):
@@ -90,14 +92,13 @@ class GalaxyToolWidget(UIBuilder):
         elif task_param['type'] == 'hidden':            param_spec['type'] = 'text'
         elif task_param['type'] == 'upload_dataset':    param_spec['type'] = 'file'
         elif task_param['type'] == 'genomebuild':       param_spec['type'] = 'choice'
-        # elif task_param['type'] == 'conditional':  # Conditional parameters should be called here
         elif task_param['type'] == 'baseurl':           param_spec['type'] = 'text'
         elif task_param['type'] == 'data':              param_spec['type'] = 'file'
         elif task_param['type'] == 'text':              param_spec['type'] = 'text'
         elif task_param['type'] == 'boolean':           param_spec['type'] = 'choice'
         elif task_param['type'] == 'directory_uri':     param_spec['type'] = 'text'
         elif task_param['type'] == 'data_collection':   param_spec['type'] = 'file'
-        elif task_param['type'] == 'repeat':            param_spec['type'] = 'text'     # TODO: Implement sub-parameters
+        elif task_param['type'] == 'repeat':            param_spec['type'] = 'number'
         elif task_param['type'] == 'rules':             param_spec['type'] = 'text'
         elif task_param['type'] == 'data_column':       param_spec['type'] = 'choice'
         elif task_param['type'] == 'integer':           param_spec['type'] = 'number'
@@ -124,6 +125,9 @@ class GalaxyToolWidget(UIBuilder):
         if param_spec['type'] == 'choice' and param_spec.get('multiple'):
             if isinstance(param_spec['default'], str): param_spec['default'] = limited_eval(param_spec['default'])
             if param_spec['default'] is None or param_spec['default'] == 'None': param_spec['default'] = []
+
+        # Special case for repeat parameters
+        if task_param['type'] == 'repeat': param_spec['default'] = task_param.get('value', task_param['default'])
 
     @staticmethod
     def options_spec(options):
@@ -162,7 +166,7 @@ class GalaxyToolWidget(UIBuilder):
             )
             spec[safe_name]['default'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'default', param_overrides,
-                                                 GalaxyToolWidget.value_strings(p.get('value', '') if p.get('value') else ''))
+                                                 GalaxyToolWidget.value_strings(p.get('value') if p.get('value') is not None else ''))
             )
             spec[safe_name]['description'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'description', param_overrides, p['help'] if 'help' in p else '')
@@ -252,7 +256,6 @@ class GalaxyToolWidget(UIBuilder):
             def update_form(change):
                 value = None
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
-                # if not isinstance(change['new'], str) and change['new'].get('value'): value = change['new'].get('value')
                 if value: self.dynamic_update({key: value})
             return update_form
 
@@ -268,6 +271,16 @@ class GalaxyToolWidget(UIBuilder):
                             else: self.form.form.kwargs_widgets[j].layout.display = 'none'  # Hide
             return conditional_form
 
+        def repeat_update_generator(i):
+            """Repeat Parameter Callback"""
+            repeat_param_name = self.all_params[i]['name']
+            def repeat_form(change):
+                if not isinstance(change['new'], dict):
+                    section_count = change['new']
+                    self.all_params[i]['value'] = section_count
+                    self.dynamic_update({repeat_param_name: section_count})
+            return repeat_form
+
         # Handle conditional parameters
         for i in range(len(self.all_params)):
             if self.all_params[i].get('conditional_test'):
@@ -277,6 +290,10 @@ class GalaxyToolWidget(UIBuilder):
             # Handle dynamic parameters
             if self.all_params[i].get('refresh_on_change', False):
                 self.form.form.kwargs_widgets[i].input.observe(dynamic_update_generator(i))
+
+            # Handle repeat parameters
+            if self.all_params[i].get('type') == 'repeat':
+                self.form.form.kwargs_widgets[i].input.observe(repeat_update_generator(i))
 
     def valid_value(self, name, value):
         values = self.parameter_spec[name].get('choices', {}).values()
@@ -304,10 +321,10 @@ class GalaxyToolWidget(UIBuilder):
         groups = []
         params = []
         for p in inputs:
-            # TODO: Add support for repeat params
             if p['type'] == 'section':
                 if 'inputs' in p:
                     section_groups, section_params = self.expand_sections(p['inputs'])
+                    for sg in section_groups: sg['name'] = f"{p['name']}/{sg['name']}"
                     groups += section_groups
                     params += section_params
 
@@ -323,8 +340,9 @@ class GalaxyToolWidget(UIBuilder):
                 conditional_params = [p['test_param']]
                 for case in p['cases']:
                     case_groups, case_params = self.expand_sections(case['inputs'])
+                    for cg in case_groups: cg['name'] = f"{p['name']}/{cg['name']}"
                     for cp in case_params:
-                        cp['name'] = f"{p['name']}___{cp['name']}"
+                        cp['name'] = f"{p['name']}___{cp['name']}____{python_safe(case['value'])}"
                         cp['conditional_display'] = case['value']
                         cp['conditional_param'] = p['test_param']['name']
                         cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
@@ -339,6 +357,31 @@ class GalaxyToolWidget(UIBuilder):
                     'hidden': p['test_param'].get('hidden', False),
                     'parameters': [c['name'] for c in conditional_params]
                 })
+            elif p['type'] == 'repeat':
+                # Add number of repeats parameter
+                if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}"
+                params.append(p)
+
+                # Add repeated sections
+                if 'inputs' in p:
+                    for i in range(p.get('value', p['default'])):
+                        repeat_groups, repeat_params = deepcopy(self.expand_sections(p['inputs']))
+                        for rg in repeat_groups: rg['name'] = f"{p['name']}/{rg['name']}"
+                        for rp in repeat_params: rp['name'] = f"{p['name']}_{i}___{rp['name']}"
+                        groups += repeat_groups
+                        params += repeat_params
+
+                        if 'cache' in p and len(p['cache']) > i:
+                            for j in range(len(repeat_params)):
+                                repeat_params[j]['value'] = p['cache'][i][j]['value']
+
+                        groups.append({
+                            'name': (p['title'] if 'title' in p else p['name']) + f" {i+1}",
+                            'description': p['help'] if 'help' in p else '',
+                            'hidden': (not p['expanded']) if 'expanded' in p else False,
+                            'parameters': [i['name'] for i in repeat_params]
+                        })
+
             else: params.append(p)
         return groups, params
 
@@ -348,18 +391,19 @@ class GalaxyToolWidget(UIBuilder):
         # Get the form's current values
         values = [p.get_interact_value() for p in self.form.form.kwargs_widgets]
         keys = [p['name'] for p in self.all_params]
-        spec = {keys[i]: values[i] for i in range(len(keys))}
-        spec = {**spec, **overrides}
+        initial_spec = {keys[i]: values[i] for i in range(len(keys))}
+        initial_spec = {**initial_spec, **overrides}
 
         self.overrides = overrides
-        self.spec = spec
+        self.spec = initial_spec
 
         # Put the dataset values in the expected format
-        spec = self.make_job_spec(self.tool, **spec)
+        spec = self.make_job_spec(self.tool, **initial_spec)
 
         # Update the Galaxy Tool model
         tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)
         self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
+        self.merge_repeat_values(initial_spec)
 
         # Build the new function wrapper
         self.parameter_groups, self.all_params = self.expand_sections()         # List groups and compile all params
@@ -375,6 +419,13 @@ class GalaxyToolWidget(UIBuilder):
         # Attach the dynamic refresh callbacks to the new form
         self.attach_interactive_callbacks()
         self.form.busy = False
+
+    def merge_repeat_values(self, initial_spec):
+        for p in self.tool.wrapped['inputs']:
+            if p['type'] == 'repeat':
+                overridden = initial_spec.get(p.get('name'))
+                if overridden:
+                    p['value'] = int(overridden)
 
     @staticmethod
     def form_value(raw_value):
