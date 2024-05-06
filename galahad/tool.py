@@ -482,7 +482,7 @@ class GalaxyUploadTool(NBTool):
     def __init__(self, server_name, session):
         NBTool.__init__(self)
         self.origin = server_name
-        self.id = 'data_upload_tool'
+        self.id = 'galahad_upload'
         self.name = 'Upload Data'
         self.description = 'Upload data files to Galaxy server'
         self.load = lambda **kwargs: GalaxyUploadTool.GalaxyUploadWidget(self, session)

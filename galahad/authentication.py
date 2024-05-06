@@ -145,7 +145,7 @@ class GalaxyAuthWidget(UIBuilder):
 class AuthenticationTool(NBTool):
     """Tool wrapper for the authentication widget"""
     origin = '+'
-    id = 'galaxy_authentication'
+    id = 'galahad_authentication'
     name = 'Galaxy Login'
     description = 'Log into a Galaxy server'
     load = lambda x: GalaxyAuthWidget()
