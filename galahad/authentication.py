@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
 from IPython.display import display
@@ -111,10 +113,18 @@ class GalaxyAuthWidget(UIBuilder):
     def register_tools(self):
         """Get the list available tools and register widgets for them with the tool manager"""
         server = server_name(galaxy_url(self.session))
-        safe_tools = [galaxy_tool for galaxy_tool in self.session.tools.list() if not skip_tool(galaxy_tool)]
+        safe_tools = self.safe_tools()
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in safe_tools]
         tools.append(GalaxyUploadTool(server, self.session))
         ToolManager.instance().register_all(tools)
+
+    def safe_tools(self):
+        raw_list = self.session.tools.list()
+        safe_list = OrderedDict()
+        for galaxy_tool in raw_list:
+            if skip_tool(galaxy_tool): continue
+            safe_list[galaxy_tool.name] = galaxy_tool
+        return list(safe_list.values())
 
     def register_history(self):
         data_list = []
