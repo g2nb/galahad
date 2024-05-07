@@ -1,3 +1,4 @@
+from string import hexdigits
 from threading import Timer
 from nbtools import ToolManager, DataManager
 
@@ -93,3 +94,7 @@ def limited_eval(raw):
 
     # Value is a string
     return raw
+
+
+def is_id(text):
+    return type(text) == str and len(text) == 32 and all(c in hexdigits for c in text)

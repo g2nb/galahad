@@ -7,10 +7,11 @@ from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool, HistoryDatasetAssociation
 from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
 from nbtools.uibuilder import UIBuilderBase
+from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval)
+                    current_history, limited_eval, is_id)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -84,7 +85,11 @@ class GalaxyToolWidget(UIBuilder):
             # Prepare data parameters
             if i['type'] == 'data':
                 id = kwargs[nested_name]
-                if id is not None: kwargs[nested_name] = {'id': id, 'src': 'hda'}
+                if id is not None:
+                    if is_url(id):
+                        dataset_json = self.tool.gi.gi.tools.put_url(content=id, history_id=current_history(self.tool.gi).id)
+                        id = dataset_json['outputs'][0]['id']
+                    kwargs[nested_name] = {'id': id, 'src': 'hda'}
         return kwargs
 
     def add_type_spec(self, task_param, param_spec):
@@ -257,6 +262,8 @@ class GalaxyToolWidget(UIBuilder):
                 value = None
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
                 if value:
+                    if self.all_params[i]['type'] == 'data':
+                        if not is_url(value) and not is_id(value): return
                     try: self.dynamic_update({key: value})
                     except ConnectionError as e:
                         self.error = e.body
