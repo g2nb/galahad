@@ -377,7 +377,10 @@ class GalaxyToolWidget(UIBuilder):
 
                         if 'cache' in p and len(p['cache']) > i:
                             for j in range(len(repeat_params)):
-                                repeat_params[j]['value'] = p['cache'][i][j]['value']
+                                if len(p['cache']) > i:
+                                    if len(p['cache'][i]) > j:
+                                        if 'value' in p['cache'][i][j]:
+                                            repeat_params[j]['value'] = p['cache'][i][j]['value']
 
                         groups.append({
                             'name': (p['title'] if 'title' in p else p['name']) + f" {i+1}",
