@@ -84,7 +84,7 @@ class GalaxyToolWidget(UIBuilder):
             # Prepare data parameters
             if i['type'] == 'data':
                 id = kwargs[nested_name]
-                kwargs[nested_name] = {'id': id, 'src': 'hda'}
+                if id is not None: kwargs[nested_name] = {'id': id, 'src': 'hda'}
         return kwargs
 
     def add_type_spec(self, task_param, param_spec):
@@ -256,7 +256,11 @@ class GalaxyToolWidget(UIBuilder):
             def update_form(change):
                 value = None
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
-                if value: self.dynamic_update({key: value})
+                if value:
+                    try: self.dynamic_update({key: value})
+                    except ConnectionError as e:
+                        self.error = e.body
+                        self.busy = False
             return update_form
 
         def conditional_update_generator(i):
