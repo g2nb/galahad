@@ -1,5 +1,5 @@
 from collections import OrderedDict
-
+from packaging.version import Version, InvalidVersion
 from bioblend.galaxy.objects import GalaxyInstance
 from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
 from IPython.display import display
@@ -123,8 +123,24 @@ class GalaxyAuthWidget(UIBuilder):
         safe_list = OrderedDict()
         for galaxy_tool in raw_list:
             if skip_tool(galaxy_tool): continue
-            safe_list[galaxy_tool.name] = galaxy_tool
+            if GalaxyAuthWidget.later_version(safe_list.get(galaxy_tool.name), galaxy_tool):
+                safe_list[galaxy_tool.name] = galaxy_tool
         return list(safe_list.values())
+
+    @staticmethod
+    def later_version(tool_a, tool_b):
+        """Returns true if tool_b has a later version number than tool_a"""
+        # Handle the None cases
+        if tool_a is None: return True
+        if tool_b is None: return False
+
+        # Parse versions to make sure they work
+        try: version_b = Version(tool_b.version)
+        except InvalidVersion: return False
+        try: version_a = Version(tool_a.version)
+        except InvalidVersion: return True
+
+        return version_a <= version_b
 
     def register_history(self):
         data_list = []
