@@ -259,6 +259,7 @@ class GalaxyToolWidget(UIBuilder):
             """Dynamic Parameter Callback"""
             key = self.all_params[i]['name']
             def update_form(change):
+                print('dynamic callback started')
                 value = None
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
                 if value:
@@ -274,6 +275,7 @@ class GalaxyToolWidget(UIBuilder):
             """Conditional Parameter Callback"""
             conditional_name = self.all_params[i]['name']
             def conditional_form(change):
+                print('conditional callback started')
                 for j in range(len(self.all_params)):
                     if self.all_params[j].get('conditional_param') == conditional_name:
                         if self.valid_value(self.all_params[i]['name'], change['new']):
@@ -286,6 +288,7 @@ class GalaxyToolWidget(UIBuilder):
             """Repeat Parameter Callback"""
             repeat_param_name = self.all_params[i]['name']
             def repeat_form(change):
+                print('repeat callback started')
                 if not isinstance(change['new'], dict):
                     section_count = change['new']
                     self.all_params[i]['value'] = section_count
@@ -301,10 +304,12 @@ class GalaxyToolWidget(UIBuilder):
             # Handle dynamic parameters
             if self.all_params[i].get('refresh_on_change', False):
                 self.form.form.kwargs_widgets[i].input.observe(dynamic_update_generator(i))
+                continue
 
             # Handle repeat parameters
             if self.all_params[i].get('type') == 'repeat':
                 self.form.form.kwargs_widgets[i].input.observe(repeat_update_generator(i))
+                continue
 
     def valid_value(self, name, value):
         values = self.parameter_spec[name].get('choices', {}).values()
@@ -325,79 +330,163 @@ class GalaxyToolWidget(UIBuilder):
         }
         return {**ui_args, **kwargs, 'parameters': self.parameter_spec}
 
-    def expand_sections(self, inputs=None):
+    def expand_sections(self, input=None):
+        # Ensure everything is in the expected format
         if not self.tool or not self.tool.wrapped or 'inputs' not in self.tool.wrapped: return [], []
-        if inputs is None: inputs = self.tool.wrapped['inputs']
+        if input is None:
+            top_level = True
+            input = self.tool.wrapped
+        else: top_level = False
+        if not input.get('inputs'): input['inputs'] = []
 
-        groups = []
-        params = []
-        for p in inputs:
+        # Assemble the group object and empty parameters
+        group = {
+            'name': input.get('label', input.get('title', input.get('name', ''))),
+            'description': input.get('description', ''),
+            'hidden': not input.get('expanded', True),
+            'parameters': []
+        }
+        all_params = []
+
+        for p in input.get('inputs'):
             if p['type'] == 'section':
-                if 'inputs' in p:
-                    section_groups, section_params = self.expand_sections(p['inputs'])
-                    for sg in section_groups: sg['name'] = f"{p['name']}/{sg['name']}"
-                    groups += section_groups
-                    params += section_params
+                section_group, section_params = self.expand_sections(p)
+                group['parameters'].append(section_group)       # Add param to group structure
+                all_params.extend(section_params)               # Add param to the flat list
 
-                groups.append({
-                    'name': p['label'] if 'label' in p else (p['title'] if 'title' in p else p['name']),
-                    'description': p['help'] if 'help' in p else '',
-                    'hidden': (not p['expanded']) if 'expanded' in p else False,
-                    'parameters': [i['name'] for i in p['inputs']]
-                })
             elif p['type'] == 'conditional':
+                # Base group object - conditional_params will always be blank at this point
+                conditional_group, conditional_params = self.expand_sections(p)
+
+                # Rename the group based on the test parameter's name - conditional params never have a nice label
+                conditional_group['name'] = p['test_param'].get('label', p['test_param'].get('title', p['test_param'].get('name', '')))
+
+                # Add the test param and add conditional_test flag
                 p['test_param']['conditional_test'] = True
-                conditional_groups = []
-                conditional_params = [p['test_param']]
+                conditional_group['parameters'].append(p['test_param'].get('name'))
+                conditional_params.append(p['test_param'])
+
+                # Add the case params
                 for case in p['cases']:
-                    case_groups, case_params = self.expand_sections(case['inputs'])
-                    for cg in case_groups: cg['name'] = f"{p['name']}/{cg['name']}"
-                    for cp in case_params:
-                        cp['name'] = f"{p['name']}___{cp['name']}____{python_safe(case['value'])}"
-                        cp['conditional_display'] = case['value']
-                        cp['conditional_param'] = p['test_param']['name']
+                    for cp in case['inputs']:
+                        cp['base_name'] = cp['name']                        # Save original name
+                        cp['name'] = f"{p['name']}___{cp['base_name']}____{python_safe(case['value'])}"  # Encode path
+                        cp['conditional_display'] = case['value']           # Save display/submit conditions
+                        cp['conditional_param'] = p['test_param']['name']   # Save name of test param
                         cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
-                    conditional_groups += case_groups
-                    conditional_params += case_params
-                groups += conditional_groups
-                params += conditional_params
+                    case_group, case_params = self.expand_sections(case)
+                    conditional_group['parameters'].extend(case_group['parameters'])
+                    conditional_params.extend(case_params)
 
-                groups.append({
-                    'name': p['test_param'].get('label', p['test_param']['name']),
-                    'description': p['test_param'].get('help', ''),
-                    'hidden': p['test_param'].get('hidden', False),
-                    'parameters': [c['name'] for c in conditional_params]
-                })
+                group['parameters'].append(conditional_group)   # Add param to group structure
+                all_params.extend(conditional_params)           # Add param to the flat list
             elif p['type'] == 'repeat':
-                # Add number of repeats parameter
-                if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}"
-                params.append(p)
+                # Add number parameter for repeat sections
+                if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}s"
+                group['parameters'].append(p.get('name', ''))
+                all_params.append(p)
+                if 'inputs' not in p: continue
 
-                # Add repeated sections
-                if 'inputs' in p:
-                    for i in range(p.get('value', p['default'])):
-                        repeat_groups, repeat_params = deepcopy(self.expand_sections(p['inputs']))
-                        for rg in repeat_groups: rg['name'] = f"{p['name']}/{rg['name']}"
-                        for rp in repeat_params: rp['name'] = f"{p['name']}_{i}___{rp['name']}"
-                        groups += repeat_groups
-                        params += repeat_params
+                # Add group N times, where N is the number of repeats
+                for i in range(p.get('value', p['default'])):
+                    p_repeat = deepcopy(p)
+                    for rp in p_repeat['inputs']:
+                        rp['base_name'] = rp['name']                    # Save original name
+                        rp['name'] = f"{p['name']}_{i}___{rp['name']}"  # Encode full name path
+                    repeat_group, repeat_params = self.expand_sections(p_repeat)
 
-                        if 'cache' in p and len(p['cache']) > i:
-                            for j in range(len(repeat_params)):
-                                if len(p['cache']) > i:
-                                    if len(p['cache'][i]) > j:
-                                        if 'value' in p['cache'][i][j]:
-                                            repeat_params[j]['value'] = p['cache'][i][j]['value']
+                    # Save cached values for repeated sections
+                    if 'cache' in p and len(p['cache']) > i:
+                        for j in range(len(repeat_params)):
+                            if len(p['cache']) > i:
+                                if len(p['cache'][i]) > j:
+                                    if 'value' in p['cache'][i][j]:
+                                        repeat_params[j]['value'] = p['cache'][i][j]['value']
 
-                        groups.append({
-                            'name': (p['title'] if 'title' in p else p['name']) + f" {i+1}",
-                            'description': p['help'] if 'help' in p else '',
-                            'hidden': (not p['expanded']) if 'expanded' in p else False,
-                            'parameters': [i['name'] for i in repeat_params]
-                        })
+                    group['parameters'].append(repeat_group)            # Add param to group structure
+                    all_params.extend(repeat_params)                    # Add param to the flat list
 
-            else: params.append(p)
-        return groups, params
+            else:
+                group['parameters'].append(p.get('name', ''))   # Add param name to group structure
+                all_params.append(p)                            # Add param to the flat list
+
+        return group['parameters'] if top_level else group, all_params
+
+        # OLD AFTER THIS
+        # return
+        #
+        # if not self.tool or not self.tool.wrapped or 'inputs' not in self.tool.wrapped: return [], []
+        # if inputs is None: inputs = self.tool.wrapped['inputs']
+        #
+        # groups = []
+        # params = []
+        # for p in inputs:
+        #     if p['type'] == 'section':
+        #         if 'inputs' in p:
+        #             section_groups, section_params = self.expand_sections(p['inputs'])
+        #             for sg in section_groups: sg['name'] = f"{p['name']}/{sg['name']}"
+        #             groups += section_groups
+        #             params += section_params
+        #
+        #         groups.append({
+        #             'name': p['label'] if 'label' in p else (p['title'] if 'title' in p else p['name']),
+        #             'description': p['help'] if 'help' in p else '',
+        #             'hidden': (not p['expanded']) if 'expanded' in p else False,
+        #             'parameters': [i['name'] for i in p['inputs']]
+        #         })
+        #     elif p['type'] == 'conditional':
+        #         p['test_param']['conditional_test'] = True
+        #         conditional_groups = []
+        #         conditional_params = [p['test_param']]
+        #         for case in p['cases']:
+        #             case_groups, case_params = self.expand_sections(case['inputs'])
+        #             for cg in case_groups: cg['name'] = f"{p['name']}/{cg['name']}"
+        #             for cp in case_params:
+        #                 cp['name'] = f"{p['name']}___{cp['name']}____{python_safe(case['value'])}"
+        #                 cp['conditional_display'] = case['value']
+        #                 cp['conditional_param'] = p['test_param']['name']
+        #                 cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
+        #             conditional_groups += case_groups
+        #             conditional_params += case_params
+        #         groups += conditional_groups
+        #         params += conditional_params
+        #
+        #         groups.append({
+        #             'name': p['test_param'].get('label', p['test_param']['name']),
+        #             'description': p['test_param'].get('help', ''),
+        #             'hidden': p['test_param'].get('hidden', False),
+        #             'parameters': [c['name'] for c in conditional_params]
+        #         })
+        #     elif p['type'] == 'repeat':
+        #         # Add number of repeats parameter
+        #         if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}"
+        #         params.append(p)
+        #
+        #         # Add repeated sections
+        #         if 'inputs' in p:
+        #             for i in range(p.get('value', p['default'])):
+        #                 repeat_groups, repeat_params = deepcopy(self.expand_sections(p['inputs']))
+        #                 for rg in repeat_groups: rg['name'] = f"{p['name']}/{rg['name']}"
+        #                 for rp in repeat_params: rp['name'] = f"{p['name']}_{i}___{rp['name']}"
+        #                 groups += repeat_groups
+        #                 params += repeat_params
+        #
+        #                 if 'cache' in p and len(p['cache']) > i:
+        #                     for j in range(len(repeat_params)):
+        #                         if len(p['cache']) > i:
+        #                             if len(p['cache'][i]) > j:
+        #                                 if 'value' in p['cache'][i][j]:
+        #                                     repeat_params[j]['value'] = p['cache'][i][j]['value']
+        #
+        #                 groups.append({
+        #                     'name': (p['title'] if 'title' in p else p['name']) + f" {i+1}",
+        #                     'description': p['help'] if 'help' in p else '',
+        #                     'hidden': (not p['expanded']) if 'expanded' in p else False,
+        #                     'parameters': [i['name'] for i in repeat_params]
+        #                 })
+        #
+        #     else: params.append(p)
+        # return groups, params
 
     def dynamic_update(self, overrides={}):
         self.form.busy = True
