@@ -15,7 +15,8 @@ class GalaxyDatasetWidget(UIOutput):
         self.dataset = dataset
         self.set_color(kwargs)
         self.set_logo(kwargs)
-        UIOutput.__init__(self, origin=self.dataset_origin(), **kwargs)
+        UIOutput.__init__(self, origin=self.dataset_origin(), default_file_menu_items=False, attach_file_prefixes=False,
+                          **kwargs)
         self.poll(**kwargs)  # Query the Galaxy server and begin polling, if needed
 
         # Register the event handler for Galaxy login
@@ -84,6 +85,10 @@ class GalaxyDatasetWidget(UIOutput):
 
             # Update the menu items
             self.extra_file_menu_items = {
+                'Preview': {
+                    'action': 'javascript',
+                    'code': 'window.open("https://usegalaxy.org/datasets/{{href}}/preview");'
+                },
                 'Download to Workspace': {
                     'action': 'method',
                     'code': 'workspace_download',
@@ -112,7 +117,7 @@ class GalaxyDatasetWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the dataset has been set
-        return [(self.dataset.id, self.dataset.name, self.dataset.wrapped.get('extension', ''))]
+        return [(f'{self.dataset.id}', self.dataset.name, self.dataset.wrapped.get('extension', ''))]
 
     def handle_notification(self):
         if self.dataset.state == 'error':
