@@ -11,7 +11,7 @@ from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval, is_id)
+                    current_history, limited_eval, is_id, walk_tree)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -26,7 +26,6 @@ class GalaxyToolWidget(UIBuilder):
     def create_function_wrapper(self, all_params):
         """Create a function that accepts the expected input and submits a Galaxy job"""
         if self.tool is None or self.tool.gi is None: return lambda: None  # Dummy function for null task
-        name_map = {}  # Map of Python-safe parameter names to Galaxy parameter names
 
         # Function for submitting a new Galaxy job based on the task form
         def submit_job(**kwargs):
@@ -44,8 +43,7 @@ class GalaxyToolWidget(UIBuilder):
 
         # Function for adding a parameter with a safe name
         def add_param(param_list, p):
-            safe_name = python_safe(p['name'])
-            name_map[safe_name] = p['name']
+            safe_name = python_safe(p.get('py_name', p['name']))
             param = inspect.Parameter(safe_name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             param_list.append(param)
 
@@ -59,10 +57,6 @@ class GalaxyToolWidget(UIBuilder):
         return submit_job
 
     @staticmethod
-    def nested_param_name(raw):
-        return raw.split('____')[0].replace('___', '|')
-
-    @staticmethod
     def is_excluded(param, kwargs):
         if param.get('conditional_display') is None: return False
         if kwargs.get(param['conditional_param']) != param['conditional_display']: return True
@@ -71,25 +65,26 @@ class GalaxyToolWidget(UIBuilder):
     def make_job_spec(self, tool, **kwargs):
         for i in self.all_params:
             # Fix parameter names to expected Galaxy values
-            nested_name = GalaxyToolWidget.nested_param_name(i['name'])
-            if i['name'] != nested_name:
-                kwargs[nested_name] = kwargs[i['name']]
-                del kwargs[i['name']]
+            galaxy_name = i.get('galaxy_name', i['name'])
+            if i['py_name'] != galaxy_name:
+                kwargs[galaxy_name] = kwargs[i['py_name']]
+                del kwargs[i['py_name']]
 
-            # Remove non-selected conditional sub-parameters
-            if GalaxyToolWidget.is_excluded(i, kwargs): del kwargs[nested_name]
+            # Ensure select parameter values don't resolve to None
+            if i['type'] == 'select' and kwargs[galaxy_name] is None: kwargs[galaxy_name] = ''
 
             # Remove repeat parent parameters
-            if i['type'] == 'repeat': del kwargs[nested_name]
+            if i['type'] == 'repeat': del kwargs[galaxy_name]
 
             # Prepare data parameters
             if i['type'] == 'data':
-                id = kwargs[nested_name]
+                id = kwargs[galaxy_name]
                 if id is not None:
                     if is_url(id):
                         dataset_json = self.tool.gi.gi.tools.put_url(content=id, history_id=current_history(self.tool.gi).id)
                         id = dataset_json['outputs'][0]['id']
-                    kwargs[nested_name] = {'id': id, 'src': 'hda'}
+                    kwargs[galaxy_name] = {'id': id, 'src': 'hda'}
+
         return kwargs
 
     def add_type_spec(self, task_param, param_spec):
@@ -164,7 +159,7 @@ class GalaxyToolWidget(UIBuilder):
         spec = {}
         param_overrides = kwargs.get('parameters', None)
         for p in self.all_params:
-            safe_name = python_safe(p['name'])
+            safe_name = p.get('py_name', python_safe(p['name']))
             spec[safe_name] = {}
             spec[safe_name]['name'] = GalaxyToolWidget.form_value(
                 GalaxyToolWidget.override_if_set(safe_name, 'name', param_overrides, p['label'] if p.get('label') else p['name'])
@@ -257,9 +252,8 @@ class GalaxyToolWidget(UIBuilder):
     def attach_interactive_callbacks(self):
         def dynamic_update_generator(i):
             """Dynamic Parameter Callback"""
-            key = self.all_params[i]['name']
+            key = self.all_params[i]['py_name']
             def update_form(change):
-                print('dynamic callback started')
                 value = None
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
                 if value:
@@ -273,22 +267,18 @@ class GalaxyToolWidget(UIBuilder):
 
         def conditional_update_generator(i):
             """Conditional Parameter Callback"""
-            conditional_name = self.all_params[i]['name']
+            conditional_name = self.all_params[i]['py_name']
             def conditional_form(change):
-                print('conditional callback started')
-                for j in range(len(self.all_params)):
-                    if self.all_params[j].get('conditional_param') == conditional_name:
-                        if self.valid_value(self.all_params[i]['name'], change['new']):
-                            if change['new'] == self.all_params[j].get('conditional_display'):
-                                self.form.form.kwargs_widgets[j].layout.display = None      # Show
-                            else: self.form.form.kwargs_widgets[j].layout.display = 'none'  # Hide
+                if change['name'] == 'value' and not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0):
+                    def permute(x): x['value'] = change['new']
+                    walk_tree(self.tool.wrapped, lambda x: x.get('py_name') == conditional_name, permute)
+                    self.dynamic_update({conditional_name: change['new']}, query_galaxy=False)
             return conditional_form
 
         def repeat_update_generator(i):
             """Repeat Parameter Callback"""
-            repeat_param_name = self.all_params[i]['name']
+            repeat_param_name = self.all_params[i]['py_name']
             def repeat_form(change):
-                print('repeat callback started')
                 if not isinstance(change['new'], dict):
                     section_count = change['new']
                     self.all_params[i]['value'] = section_count
@@ -355,35 +345,45 @@ class GalaxyToolWidget(UIBuilder):
                 all_params.extend(section_params)               # Add param to the flat list
 
             elif p['type'] == 'conditional':
+                # Add galaxy and python names to conditional (used in full path names)
+                p['galaxy_name'] = f"{p['name']}" if top_level else p.get('galaxy_name', p['name'])
+                p['py_name'] = python_safe(p['galaxy_name'])
+
                 # Base group object - conditional_params will always be blank at this point
                 conditional_group, conditional_params = self.expand_sections(p)
 
                 # Rename the group based on the test parameter's name - conditional params never have a nice label
                 conditional_group['name'] = p['test_param'].get('label', p['test_param'].get('title', p['test_param'].get('name', '')))
+                if not conditional_group['name']: conditional_group['name'] = p['test_param'].get('name', 'Select')
 
                 # Add the test param and add conditional_test flag
+                p['test_param']['galaxy_name'] = f"{p['name']}|{p['test_param']['name']}" if top_level else f"{p['galaxy_name']}|{p['test_param']['name']}"
+                p['test_param']['py_name'] = python_safe(p['test_param']['galaxy_name'])
                 p['test_param']['conditional_test'] = True
-                conditional_group['parameters'].append(p['test_param'].get('name'))
+                conditional_group['parameters'].append(p['test_param'].get('py_name', p['test_param']['name']))
                 conditional_params.append(p['test_param'])
 
                 # Add the case params
                 for case in p['cases']:
-                    for cp in case['inputs']:
-                        cp['base_name'] = cp['name']                        # Save original name
-                        cp['name'] = f"{p['name']}___{cp['base_name']}____{python_safe(case['value'])}"  # Encode path
-                        cp['conditional_display'] = case['value']           # Save display/submit conditions
-                        cp['conditional_param'] = p['test_param']['name']   # Save name of test param
-                        cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
-                    case_group, case_params = self.expand_sections(case)
-                    conditional_group['parameters'].extend(case_group['parameters'])
-                    conditional_params.extend(case_params)
+                    if case['value'] == p['test_param']['value']:
+                        for cp in case['inputs']:
+                            cp['galaxy_name'] = f"{p['name']}|{cp['name']}" if top_level else f"{p['galaxy_name']}|{cp['name']}"
+                            cp['py_name'] = python_safe(cp['galaxy_name'])
+                            cp['conditional_display'] = case['value']           # Save display/submit conditions
+                            cp['conditional_param'] = p['test_param']['name']   # Save name of test param
+                            cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
+                        case_group, case_params = self.expand_sections(case)
+                        conditional_group['parameters'].extend(case_group['parameters'])
+                        conditional_params.extend(case_params)
 
                 group['parameters'].append(conditional_group)   # Add param to group structure
                 all_params.extend(conditional_params)           # Add param to the flat list
             elif p['type'] == 'repeat':
                 # Add number parameter for repeat sections
                 if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}s"
-                group['parameters'].append(p.get('name', ''))
+                p['galaxy_name'] = f"{p['name']}" if top_level else f"{p['galaxy_name']}"
+                p['py_name'] = python_safe(p['galaxy_name'])
+                group['parameters'].append(p.get('py_name', p['name']))
                 all_params.append(p)
                 if 'inputs' not in p: continue
 
@@ -391,8 +391,8 @@ class GalaxyToolWidget(UIBuilder):
                 for i in range(p.get('value', p['default'])):
                     p_repeat = deepcopy(p)
                     for rp in p_repeat['inputs']:
-                        rp['base_name'] = rp['name']                    # Save original name
-                        rp['name'] = f"{p['name']}_{i}___{rp['name']}"  # Encode full name path
+                        rp['galaxy_name'] = f"{p['name']}_{i}|{rp['name']}" if top_level else f"{p['galaxy_name']}_{i}|{rp['name']}"
+                        rp['py_name'] = python_safe(rp['galaxy_name'])
                     repeat_group, repeat_params = self.expand_sections(p_repeat)
 
                     # Save cached values for repeated sections
@@ -407,93 +407,21 @@ class GalaxyToolWidget(UIBuilder):
                     all_params.extend(repeat_params)                    # Add param to the flat list
 
             else:
-                group['parameters'].append(p.get('name', ''))   # Add param name to group structure
-                all_params.append(p)                            # Add param to the flat list
+                if not p.get('galaxy_name'):
+                    p['galaxy_name'] = f"{p['name']}" if top_level else \
+                        (f"{input['galaxy_name']}|{p['name']}" if input.get('galaxy_name') else f"{p['name']}")
+                if not p.get('py_name'): p['py_name'] = python_safe(p['galaxy_name'])
+                group['parameters'].append(p.get('py_name', p['name']))     # Add param name to group structure
+                all_params.append(p)                                        # Add param to the flat list
 
         return group['parameters'] if top_level else group, all_params
 
-        # OLD AFTER THIS
-        # return
-        #
-        # if not self.tool or not self.tool.wrapped or 'inputs' not in self.tool.wrapped: return [], []
-        # if inputs is None: inputs = self.tool.wrapped['inputs']
-        #
-        # groups = []
-        # params = []
-        # for p in inputs:
-        #     if p['type'] == 'section':
-        #         if 'inputs' in p:
-        #             section_groups, section_params = self.expand_sections(p['inputs'])
-        #             for sg in section_groups: sg['name'] = f"{p['name']}/{sg['name']}"
-        #             groups += section_groups
-        #             params += section_params
-        #
-        #         groups.append({
-        #             'name': p['label'] if 'label' in p else (p['title'] if 'title' in p else p['name']),
-        #             'description': p['help'] if 'help' in p else '',
-        #             'hidden': (not p['expanded']) if 'expanded' in p else False,
-        #             'parameters': [i['name'] for i in p['inputs']]
-        #         })
-        #     elif p['type'] == 'conditional':
-        #         p['test_param']['conditional_test'] = True
-        #         conditional_groups = []
-        #         conditional_params = [p['test_param']]
-        #         for case in p['cases']:
-        #             case_groups, case_params = self.expand_sections(case['inputs'])
-        #             for cg in case_groups: cg['name'] = f"{p['name']}/{cg['name']}"
-        #             for cp in case_params:
-        #                 cp['name'] = f"{p['name']}___{cp['name']}____{python_safe(case['value'])}"
-        #                 cp['conditional_display'] = case['value']
-        #                 cp['conditional_param'] = p['test_param']['name']
-        #                 cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
-        #             conditional_groups += case_groups
-        #             conditional_params += case_params
-        #         groups += conditional_groups
-        #         params += conditional_params
-        #
-        #         groups.append({
-        #             'name': p['test_param'].get('label', p['test_param']['name']),
-        #             'description': p['test_param'].get('help', ''),
-        #             'hidden': p['test_param'].get('hidden', False),
-        #             'parameters': [c['name'] for c in conditional_params]
-        #         })
-        #     elif p['type'] == 'repeat':
-        #         # Add number of repeats parameter
-        #         if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}"
-        #         params.append(p)
-        #
-        #         # Add repeated sections
-        #         if 'inputs' in p:
-        #             for i in range(p.get('value', p['default'])):
-        #                 repeat_groups, repeat_params = deepcopy(self.expand_sections(p['inputs']))
-        #                 for rg in repeat_groups: rg['name'] = f"{p['name']}/{rg['name']}"
-        #                 for rp in repeat_params: rp['name'] = f"{p['name']}_{i}___{rp['name']}"
-        #                 groups += repeat_groups
-        #                 params += repeat_params
-        #
-        #                 if 'cache' in p and len(p['cache']) > i:
-        #                     for j in range(len(repeat_params)):
-        #                         if len(p['cache']) > i:
-        #                             if len(p['cache'][i]) > j:
-        #                                 if 'value' in p['cache'][i][j]:
-        #                                     repeat_params[j]['value'] = p['cache'][i][j]['value']
-        #
-        #                 groups.append({
-        #                     'name': (p['title'] if 'title' in p else p['name']) + f" {i+1}",
-        #                     'description': p['help'] if 'help' in p else '',
-        #                     'hidden': (not p['expanded']) if 'expanded' in p else False,
-        #                     'parameters': [i['name'] for i in repeat_params]
-        #                 })
-        #
-        #     else: params.append(p)
-        # return groups, params
-
-    def dynamic_update(self, overrides={}):
+    def dynamic_update(self, overrides={}, query_galaxy=True):
         self.form.busy = True
 
         # Get the form's current values
         values = [p.get_interact_value() for p in self.form.form.kwargs_widgets]
-        keys = [p['name'] for p in self.all_params]
+        keys = [p['py_name'] for p in self.all_params]
         initial_spec = {keys[i]: values[i] for i in range(len(keys))}
         initial_spec = {**initial_spec, **overrides}
 
@@ -504,9 +432,10 @@ class GalaxyToolWidget(UIBuilder):
         spec = self.make_job_spec(self.tool, **initial_spec)
 
         # Update the Galaxy Tool model
-        tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)
-        self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
-        self.merge_repeat_values(initial_spec)
+        if query_galaxy:
+            tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)
+            self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
+            self.merge_repeat_values(initial_spec)
 
         # Build the new function wrapper
         self.parameter_groups, self.all_params = self.expand_sections()         # List groups and compile all params

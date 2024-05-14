@@ -98,3 +98,16 @@ def limited_eval(raw):
 
 def is_id(text):
     return type(text) == str and len(text) == 32 and all(c in hexdigits for c in text)
+
+
+def walk_tree(tree, condition, permutation):
+    """Walk the given tree structure, and if the node meets the condition, apply the permutation"""
+    if condition(tree): permutation(tree)
+    if tree.get('test_param'):
+        walk_tree(tree['test_param'], condition, permutation)
+    if tree.get('cases'):
+        for i in tree['cases']:
+            walk_tree(i, condition, permutation)
+    if tree.get('inputs'):
+        for i in tree['inputs']:
+            walk_tree(i, condition, permutation)
