@@ -110,8 +110,8 @@ class GalaxyToolWidget(UIBuilder):
 
         # Set parameter attributes
         if 'optional' in task_param and task_param['optional']: param_spec['optional'] = True
-        if 'multiple' in task_param and task_param['multiple']: param_spec['multiple'] = True
-        if 'multiple' in task_param and task_param['multiple']: param_spec['maximum'] = 100
+        if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['multiple'] = True
+        if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['maximum'] = 100
         if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
         if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
         if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
@@ -340,13 +340,16 @@ class GalaxyToolWidget(UIBuilder):
 
         for p in input.get('inputs'):
             if p['type'] == 'section':
+                p['galaxy_name'] = f"{p['name']}" if top_level or not input.get('galaxy_name') else f"{input['galaxy_name']}|{p['name']}"
+                p['py_name'] = python_safe(p['galaxy_name'])
+
                 section_group, section_params = self.expand_sections(p)
                 group['parameters'].append(section_group)       # Add param to group structure
                 all_params.extend(section_params)               # Add param to the flat list
 
             elif p['type'] == 'conditional':
                 # Add galaxy and python names to conditional (used in full path names)
-                p['galaxy_name'] = f"{p['name']}" if top_level else p.get('galaxy_name', p['name'])
+                p['galaxy_name'] = f"{p['name']}" if top_level or not input.get('galaxy_name') else f"{input['galaxy_name']}|{p['name']}"
                 p['py_name'] = python_safe(p['galaxy_name'])
 
                 # Base group object - conditional_params will always be blank at this point
@@ -365,10 +368,13 @@ class GalaxyToolWidget(UIBuilder):
 
                 # Add the case params
                 for case in p['cases']:
+                    case['galaxy_name'] = p['galaxy_name']
+                    case['py_name'] = p['py_name']
+
                     if case['value'] == p['test_param']['value']:
                         for cp in case['inputs']:
                             cp['galaxy_name'] = f"{p['name']}|{cp['name']}" if top_level else f"{p['galaxy_name']}|{cp['name']}"
-                            cp['py_name'] = python_safe(cp['galaxy_name'])
+                            cp['py_name'] = python_safe(cp['galaxy_name'] + '_' + case['value'])
                             cp['conditional_display'] = case['value']           # Save display/submit conditions
                             cp['conditional_param'] = p['test_param']['name']   # Save name of test param
                             cp['hidden'] = False if case['value'] == p['test_param']['value'] else True
@@ -381,7 +387,7 @@ class GalaxyToolWidget(UIBuilder):
             elif p['type'] == 'repeat':
                 # Add number parameter for repeat sections
                 if 'title' in p and 'label' not in p: p['label'] = f"Number of {p['title']}s"
-                p['galaxy_name'] = f"{p['name']}" if top_level else f"{p['galaxy_name']}"
+                p['galaxy_name'] = f"{p['name']}" if top_level or not input.get('galaxy_name') else f"{input['galaxy_name']}|{p['name']}"
                 p['py_name'] = python_safe(p['galaxy_name'])
                 group['parameters'].append(p.get('py_name', p['name']))
                 all_params.append(p)
@@ -453,6 +459,19 @@ class GalaxyToolWidget(UIBuilder):
         self.form.busy = False
 
     def merge_repeat_values(self, initial_spec):
+        # def test(x):
+        #     print('TESTING NODE')
+        #     print(x.get('name'))
+        #     print(x.get('py_name'))
+        #     return x.get('py_name')
+        #
+        # def replace(x):
+        #     print('REPLACE')
+        #     print(x.get('py_name'))
+        #     print(initial_spec.get(x.get('py_name')))
+        #     x['value'] = initial_spec.get(x.get('py_name'))
+        # walk_tree(self.tool.wrapped, lambda x: x.get('py_name') in initial_spec, replace)
+
         for p in self.tool.wrapped['inputs']:
             if p['type'] == 'repeat':
                 overridden = initial_spec.get(p.get('name'))
