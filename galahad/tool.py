@@ -393,6 +393,10 @@ class GalaxyToolWidget(UIBuilder):
                 all_params.append(p)
                 if 'inputs' not in p: continue
 
+                # Merge repeat values, if overridden
+                if hasattr(self, 'initial_spec'):
+                    if p['py_name'] in self.initial_spec: p['value'] = int(self.initial_spec[p['py_name']])
+
                 # Add group N times, where N is the number of repeats
                 for i in range(p.get('value', p['default'])):
                     p_repeat = deepcopy(p)
@@ -432,7 +436,7 @@ class GalaxyToolWidget(UIBuilder):
         initial_spec = {**initial_spec, **overrides}
 
         self.overrides = overrides
-        self.spec = initial_spec
+        self.initial_spec = initial_spec
 
         # Put the dataset values in the expected format
         spec = self.make_job_spec(self.tool, **initial_spec)
@@ -441,7 +445,6 @@ class GalaxyToolWidget(UIBuilder):
         if query_galaxy:
             tool_json = self.tool.gi.gi.tools.build(tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, inputs=spec)
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
-            self.merge_repeat_values(initial_spec)
 
         # Build the new function wrapper
         self.parameter_groups, self.all_params = self.expand_sections()         # List groups and compile all params
@@ -457,26 +460,6 @@ class GalaxyToolWidget(UIBuilder):
         # Attach the dynamic refresh callbacks to the new form
         self.attach_interactive_callbacks()
         self.form.busy = False
-
-    def merge_repeat_values(self, initial_spec):
-        # def test(x):
-        #     print('TESTING NODE')
-        #     print(x.get('name'))
-        #     print(x.get('py_name'))
-        #     return x.get('py_name')
-        #
-        # def replace(x):
-        #     print('REPLACE')
-        #     print(x.get('py_name'))
-        #     print(initial_spec.get(x.get('py_name')))
-        #     x['value'] = initial_spec.get(x.get('py_name'))
-        # walk_tree(self.tool.wrapped, lambda x: x.get('py_name') in initial_spec, replace)
-
-        for p in self.tool.wrapped['inputs']:
-            if p['type'] == 'repeat':
-                overridden = initial_spec.get(p.get('name'))
-                if overridden:
-                    p['value'] = int(overridden)
 
     @staticmethod
     def form_value(raw_value):
