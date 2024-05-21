@@ -270,9 +270,7 @@ class GalaxyToolWidget(UIBuilder):
             conditional_name = self.all_params[i]['py_name']
             def conditional_form(change):
                 if change['name'] == 'value' and not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0):
-                    def permute(x): x['value'] = change['new']
-                    walk_tree(self.tool.wrapped, lambda x: x.get('py_name') == conditional_name, permute)
-                    self.dynamic_update({conditional_name: change['new']}, query_galaxy=False)
+                    self.dynamic_update({ conditional_name: change['new'] }, query_galaxy=False)
             return conditional_form
 
         def repeat_update_generator(i):
@@ -365,6 +363,11 @@ class GalaxyToolWidget(UIBuilder):
                 p['test_param']['conditional_test'] = True
                 conditional_group['parameters'].append(p['test_param'].get('py_name', p['test_param']['name']))
                 conditional_params.append(p['test_param'])
+
+                # If the test param value is overridden, set new value
+                if hasattr(self, 'initial_spec'):
+                    if p['test_param']['py_name'] in self.initial_spec:
+                        p['test_param']['value'] = self.initial_spec[p['test_param']['py_name']]
 
                 # Add the case params
                 for case in p['cases']:
