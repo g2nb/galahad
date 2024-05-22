@@ -413,10 +413,9 @@ class GalaxyToolWidget(UIBuilder):
                     # Save cached values for repeated sections
                     if 'cache' in p and len(p['cache']) > i:
                         for j in range(len(repeat_params)):
-                            if len(p['cache']) > i:
-                                if len(p['cache'][i]) > j:
-                                    if 'value' in p['cache'][i][j]:
-                                        repeat_params[j]['value'] = p['cache'][i][j]['value']
+                            if len(p['cache'][i]) > j:
+                                if 'value' in p['cache'][i][j]:
+                                    repeat_params[j]['value'] = p['cache'][i][j]['value']
 
                     group['parameters'].append(repeat_group)            # Add param to group structure
                     all_params.extend(repeat_params)                    # Add param to the flat list
