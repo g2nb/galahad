@@ -506,21 +506,24 @@ class GalaxyUploadTool(NBTool):
                 'origin': tool.origin,
                 'name': tool.name,
                 'description': tool.description,
-                'parameters': {'dataset': {'type': 'file', 'description': 'Select a file to upload to the Galaxy server'}},
+                'parameters': {'datasets': {'type': 'file', 'description': 'Select a file to upload to the Galaxy server',
+                                            'multiple': True, 'maximum': 10}},
                 'upload_callback': GalaxyToolWidget.generate_upload_callback(session, self),
                 **kwargs
             }
             UIBuilder.__init__(self, self.create_function_wrapper(), **ui_args)
 
         def create_function_wrapper(self):
-            def upload_data(dataset):
-                if type(dataset) == str:
+            def upload_data(datasets):
+                if type(datasets) == str: datasets = [datasets]
+                for dataset in datasets:
                     # Upload the dataset
                     history = current_history(self.session)
                     dataset_json = self.session.gi.tools.put_url(content=dataset, history_id=history.id)
                     dataset = HistoryDatasetAssociation(ds_dict=dataset_json['outputs'][0], container=history, gi=self.session)
 
-                display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(self.session), secondary_color=True)))
+                    # Display a dataset widget
+                    display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(self.session), secondary_color=True)))
             return upload_data
 
     def __init__(self, server_name, session):
