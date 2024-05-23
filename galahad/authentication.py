@@ -94,7 +94,11 @@ class GalaxyAuthWidget(UIBuilder):
         display(history_widget)
 
         def change_history(change):
+            # Set the current history
             self.session.current_history = self.session.histories.get(history_widget.form.form.children[0].input.value)
+
+            # Trigger file inputs of tools to update their history lists
+            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
 
         history_widget.form.form.children[0].input.observe(change_history)
         self.form.close()

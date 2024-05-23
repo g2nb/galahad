@@ -5,7 +5,7 @@ from copy import deepcopy
 from IPython.display import display
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool, HistoryDatasetAssociation
-from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager
+from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager, EventManager
 from nbtools.uibuilder import UIBuilderBase
 from nbtools.utils import is_url
 
@@ -249,6 +249,19 @@ class GalaxyToolWidget(UIBuilder):
         self.attach_interactive_callbacks()
         self.attach_help_section()
 
+    def history_callback(self, data):
+        # Update history choices for all data params
+        for i in range(len(self.all_params)):
+            if self.all_params[i].get('type') == 'data':
+                # Get all matching data in the current history
+                origin = server_name(galaxy_url(data))                                          # Get server/origin
+                history = data.current_history.name                                             # Get history
+                kinds = self.form.form.kwargs_widgets[i].input.file_list.children[0].kinds      # Get accepted kinds
+                matching_data = DataManager.instance().filter(origin=origin, group=history, kinds=kinds)
+                matching_data.reverse()                                                         # Display latest at top
+                updated = { data.label: data.uri for data in matching_data }                    # Build new data dict
+                self.form.form.kwargs_widgets[i].input.file_list.children[0].choices = updated  # Update menu
+
     def attach_interactive_callbacks(self):
         def dynamic_update_generator(i):
             """Dynamic Parameter Callback"""
@@ -283,8 +296,13 @@ class GalaxyToolWidget(UIBuilder):
                     self.dynamic_update({repeat_param_name: section_count})
             return repeat_form
 
-        # Handle conditional parameters
+        # Handle callbacks for data parameters
+        EventManager.instance().register("galaxy.history_refresh", self.history_callback)
+
+        # Handle callbacks for complex parameter types
         for i in range(len(self.all_params)):
+
+            # Handle conditional parameters
             if self.all_params[i].get('conditional_test'):
                 self.form.form.kwargs_widgets[i].input.observe(conditional_update_generator(i))
                 continue
