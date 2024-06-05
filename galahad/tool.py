@@ -421,19 +421,13 @@ class GalaxyToolWidget(UIBuilder):
                 # Add group N times, where N is the number of repeats
                 for i in range(p.get('value', p['default'])):
                     p_repeat = deepcopy(p)
+                    if 'cache' in p and len(p['cache']) > i: p_repeat['inputs'] = p['cache'][i]  # If cache, copy inputs
                     p_repeat['galaxy_name'] = f"{p['name']}_{i}" if top_level or not input.get('galaxy_name') else f"{input['galaxy_name']}|{p['name']}_{i}"
                     p_repeat['py_name'] = python_safe(p['galaxy_name'])
                     for rp in p_repeat['inputs']:
                         rp['galaxy_name'] = f"{p['name']}_{i}|{rp['name']}" if top_level else f"{p['galaxy_name']}_{i}|{rp['name']}"
                         rp['py_name'] = python_safe(rp['galaxy_name'])
                     repeat_group, repeat_params = self.expand_sections(p_repeat)
-
-                    # Save cached values for repeated sections
-                    if 'cache' in p and len(p['cache']) > i:
-                        for j in range(len(repeat_params)):
-                            if len(p['cache'][i]) > j:
-                                if 'value' in p['cache'][i][j]:
-                                    repeat_params[j]['value'] = p['cache'][i][j]['value']
 
                     group['parameters'].append(repeat_group)            # Add param to group structure
                     all_params.extend(repeat_params)                    # Add param to the flat list
