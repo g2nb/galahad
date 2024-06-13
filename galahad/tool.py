@@ -112,7 +112,7 @@ class GalaxyToolWidget(UIBuilder):
         if 'optional' in task_param and task_param['optional']: param_spec['optional'] = True
         if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['multiple'] = True
         if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['maximum'] = 100
-        if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
+        # if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
         if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
         if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
         if 'options' in task_param: param_spec['choices'] = GalaxyToolWidget.options_spec(task_param['options'])
