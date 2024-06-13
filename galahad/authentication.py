@@ -8,7 +8,7 @@ from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool, GalaxyUploadTool
 from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update, \
-    skip_tool
+    skip_tool, data_name
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -160,7 +160,7 @@ class GalaxyAuthWidget(UIBuilder):
             for content in history.content_infos:
                 if content.wrapped['deleted']: continue
                 kind = 'error' if content.state == 'error' else (content.wrapped['extension'] if 'extension' in content.wrapped else '')
-                data = Data(origin=origin, group=history.name, uri=content.id, label=content.name, kind=kind, icon=data_icon(content.state))
+                data = Data(origin=origin, group=history.name, uri=content.id, label=data_name(content), kind=kind, icon=data_icon(content.state))
                 DataManager.instance().data_widget(origin=data.origin, uri=data.uri, widget=create_dataset_lambda(content.id))
                 data_list.append(data)
                 poll_data_and_update(content)

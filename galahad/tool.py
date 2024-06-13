@@ -11,7 +11,7 @@ from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval, is_id, walk_tree)
+                    current_history, limited_eval, is_id, walk_tree, data_name)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -197,7 +197,7 @@ class GalaxyToolWidget(UIBuilder):
                     # Register the uploaded file with the data manager
                     kind = 'error' if dataset.state == 'error' else (dataset.wrapped['extension'] if 'extension' in dataset.wrapped else '')
                     data = Data(origin=server_name(galaxy_url(session)), group=history.name, uri=dataset.id,
-                                label=dataset.name, kind=kind, icon=data_icon(dataset.state))
+                                label=data_name(dataset), kind=kind, icon=data_icon(dataset.state))
                     def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
                     DataManager.instance().data_widget(origin=data.origin, uri=data.uri,
                                                        widget=create_dataset_lambda(dataset.id))

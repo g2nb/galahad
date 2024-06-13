@@ -51,6 +51,10 @@ def data_icon(status):
     else: return None
 
 
+def data_name(dataset):
+    return f'{dataset.wrapped["hid"]}: {dataset.name}'
+
+
 def poll_data_and_update(dataset):
     if dataset.state == 'new' or dataset.state == 'running':
         initial_state = dataset.state
