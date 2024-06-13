@@ -112,7 +112,6 @@ class GalaxyToolWidget(UIBuilder):
         if 'optional' in task_param and task_param['optional']: param_spec['optional'] = True
         if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['multiple'] = True
         if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['maximum'] = 100
-        # if 'textable' in task_param and task_param['textable']: param_spec['combo'] = True
         if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
         if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
         if 'options' in task_param: param_spec['choices'] = GalaxyToolWidget.options_spec(task_param['options'])
@@ -255,7 +254,7 @@ class GalaxyToolWidget(UIBuilder):
             if self.all_params[i].get('type') == 'data':
                 # Get all matching data in the current history
                 origin = server_name(galaxy_url(data))                                          # Get server/origin
-                history = data.current_history.name                                             # Get history
+                history = current_history(data).name                                            # Get history
                 kinds = self.form.form.kwargs_widgets[i].input.file_list.children[0].kinds      # Get accepted kinds
                 matching_data = DataManager.instance().filter(origin=origin, group=history, kinds=kinds)
                 matching_data.reverse()                                                         # Display latest at top
