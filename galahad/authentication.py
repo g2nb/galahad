@@ -81,8 +81,13 @@ class GalaxyAuthWidget(UIBuilder):
         """Replace the unauthenticated widget with the authenticated mode"""
         self.form.form.children[2].value = ''        # Blank password so it doesn't get serialized
 
-        history_widget = UIBuilder(lambda history: None, name=self.session.gi.email, subtitle=galaxy_url(self.session),
-            display_header=False, display_footer=False, logo=GALAXY_LOGO, color=session_color(), parameters={
+        def refresh_history(history):
+            self.register_history()
+            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+
+        history_widget = UIBuilder(refresh_history, name=self.session.gi.email, subtitle=galaxy_url(self.session),
+            display_header=False, run_label='Refresh History', collapse=False, logo=GALAXY_LOGO, color=session_color(),
+            parameters={
                 'history': {
                     'label': 'History',
                     'type': 'choice',
