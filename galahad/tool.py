@@ -11,7 +11,7 @@ from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval, is_id, walk_tree, data_name)
+                    current_history, limited_eval, data_name, extract_id)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -83,6 +83,9 @@ class GalaxyToolWidget(UIBuilder):
                     if is_url(id):
                         dataset_json = self.tool.gi.gi.tools.put_url(content=id, history_id=current_history(self.tool.gi).id)
                         id = dataset_json['outputs'][0]['id']
+                    else:
+                        extracted = extract_id(id)
+                        if extracted: id = extract_id(id)
                     kwargs[galaxy_name] = {'id': id, 'src': 'hda'}
 
         return kwargs
@@ -128,13 +131,24 @@ class GalaxyToolWidget(UIBuilder):
         # Special case for repeat parameters
         if task_param['type'] == 'repeat': param_spec['default'] = task_param.get('value', task_param['default'])
 
+        # Special case for data parameters
+        if task_param['type'] == 'data':
+            param_spec['default'] = GalaxyToolWidget.default_value_name(param_spec['default'], param_spec.get('choices'))
+
+    @staticmethod
+    def default_value_name(id, choices):
+        if not choices: return id
+        for choice in choices.values():
+            if extract_id(choice) == id[0]: return [choice]
+        return id
+
     @staticmethod
     def options_spec(options):
         if isinstance(options, list): return { c[0]: c[1] for c in options }
         else:
             choices = {}
             for l in options.values():
-                for i in l: choices[i['name']] = i['id']
+                for i in l: choices[i['name']] = f"{i['name']} ({i['id']})"
             return choices
 
     @staticmethod
@@ -270,7 +284,7 @@ class GalaxyToolWidget(UIBuilder):
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
                 if value:
                     if self.all_params[i]['type'] == 'data':
-                        if not is_url(value) and not is_id(value): return
+                        if not is_url(value) and not extract_id(value): return
                     try: self.dynamic_update({key: value})
                     except ConnectionError as e:
                         self.error = e.body

@@ -1,7 +1,7 @@
 from bioblend.galaxy.objects import History
 from nbtools import UIOutput, EventManager
 from .sessions import session
-from .utils import session_color, GALAXY_LOGO, server_name, galaxy_url
+from .utils import session_color, GALAXY_LOGO, server_name, galaxy_url, data_name
 
 
 class GalaxyHistoryWidget(UIOutput):
@@ -61,7 +61,7 @@ class GalaxyHistoryWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the history has been set
-        return [(f"{galaxy_url(self.history.gi)}{dataset.wrapped['url']}/display", dataset.name, dataset.wrapped['extension'])
+        return [(f'{data_name(dataset)} ({dataset.id})', data_name(dataset), dataset.wrapped['extension'])
                 for dataset in self.history.content_infos]
 
     def history_origin(self):

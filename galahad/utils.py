@@ -1,3 +1,4 @@
+from re import search
 from string import hexdigits
 from threading import Timer
 from nbtools import ToolManager, DataManager
@@ -102,6 +103,14 @@ def limited_eval(raw):
 
 def is_id(text):
     return type(text) == str and len(text) == 32 and all(c in hexdigits for c in text)
+
+
+def extract_id(name):
+    if is_id(name): return name
+    try:
+        maybe_id = search(r'\((.*?)\)', name).group(1)
+        return maybe_id if is_id(maybe_id) else None
+    except AttributeError: return None
 
 
 def walk_tree(tree, condition, permutation):

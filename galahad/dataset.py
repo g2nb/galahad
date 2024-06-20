@@ -118,7 +118,7 @@ class GalaxyDatasetWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the dataset has been set
-        return [(f'{self.dataset.id}', data_name(self.dataset), self.dataset.wrapped.get('extension', ''))]
+        return [(f'{data_name(self.dataset)} ({self.dataset.id})', data_name(self.dataset), self.dataset.wrapped.get('extension', ''))]
 
     def handle_notification(self):
         if self.dataset.state == 'error':
