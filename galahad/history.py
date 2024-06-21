@@ -61,7 +61,7 @@ class GalaxyHistoryWidget(UIOutput):
     def files_list(self):
         """Return the file URL is in the format the widget can handle"""
         if not self.initialized(): return  # Ensure the history has been set
-        return [(f'{data_name(dataset)} ({dataset.id})', data_name(dataset), dataset.wrapped['extension'])
+        return [(data_name(dataset), data_name(dataset), dataset.wrapped['extension'])
                 for dataset in self.history.content_infos]
 
     def history_origin(self):

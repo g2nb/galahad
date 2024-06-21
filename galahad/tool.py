@@ -11,7 +11,7 @@ from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval, data_name, extract_id)
+                    current_history, limited_eval, data_name)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -26,6 +26,10 @@ class GalaxyToolWidget(UIBuilder):
     def create_function_wrapper(self, all_params):
         """Create a function that accepts the expected input and submits a Galaxy job"""
         if self.tool is None or self.tool.gi is None: return lambda: None  # Dummy function for null task
+
+        # Initialize a mapping of display name to dataset ID and vice versa
+        self.name_to_id = {}
+        self.id_to_name = {}
 
         # Function for submitting a new Galaxy job based on the task form
         def submit_job(**kwargs):
@@ -84,8 +88,8 @@ class GalaxyToolWidget(UIBuilder):
                         dataset_json = self.tool.gi.gi.tools.put_url(content=id, history_id=current_history(self.tool.gi).id)
                         id = dataset_json['outputs'][0]['id']
                     else:
-                        extracted = extract_id(id)
-                        if extracted: id = extract_id(id)
+                        actual_id = self.lookup_id(id)
+                        if actual_id: id = actual_id
                     kwargs[galaxy_name] = {'id': id, 'src': 'hda'}
 
         return kwargs
@@ -117,7 +121,7 @@ class GalaxyToolWidget(UIBuilder):
         if 'multiple' in task_param and task_param['multiple'] and param_spec['type'] != 'file': param_spec['maximum'] = 100
         if 'hidden' in task_param and task_param['hidden']: param_spec['hide'] = True
         if 'extensions' in task_param: param_spec['kinds'] = task_param['extensions']
-        if 'options' in task_param: param_spec['choices'] = GalaxyToolWidget.options_spec(task_param['options'])
+        if 'options' in task_param: param_spec['choices'] = self.options_spec(task_param['options'])
 
         # Special case for booleans
         if task_param['type'] == 'boolean' and 'options' not in task_param:
@@ -133,22 +137,23 @@ class GalaxyToolWidget(UIBuilder):
 
         # Special case for data parameters
         if task_param['type'] == 'data':
-            param_spec['default'] = GalaxyToolWidget.default_value_name(param_spec['default'], param_spec.get('choices'))
+            param_spec['default'] = self.default_value_name(param_spec['default'], task_param.get('options'))
 
-    @staticmethod
-    def default_value_name(id, choices):
+    def default_value_name(self, id, choices):
         if not choices: return id
-        for choice in choices.values():
-            if extract_id(choice) == id[0]: return [choice]
-        return id
+        display_name = self.lookup_name(id[0])
+        if display_name: return [display_name]
+        else: return id
 
-    @staticmethod
-    def options_spec(options):
+    def options_spec(self, options):
         if isinstance(options, list): return { c[0]: c[1] for c in options }
         else:
             choices = {}
             for l in options.values():
-                for i in l: choices[i['name']] = f"{i['name']} ({i['id']})"
+                for i in l:
+                    choices[i['name']] = i['name']
+                    self.name_to_id[i['name']] = i['id']
+                    self.id_to_name[i['id']] = i['name']
             return choices
 
     @staticmethod
@@ -275,6 +280,26 @@ class GalaxyToolWidget(UIBuilder):
                 updated = { data.label: data.uri for data in matching_data }                    # Build new data dict
                 self.form.form.kwargs_widgets[i].input.file_list.children[0].choices = updated  # Update menu
 
+    def lookup_id(self, display_name):
+        # Attempt to look up id using this tool's data map
+        id = self.name_to_id.get(display_name)
+        if id: return id
+
+        # If not found, use the DataManager, return None is not there either
+        data = DataManager.instance().filter(origin=self.origin, label=display_name)
+        if data: return data.id
+        else: return None
+
+    def lookup_name(self, id):
+        # Attempt to look up name using this tool's data map
+        display_name = self.id_to_name.get(id)
+        if display_name: return display_name
+
+        # If not found, use the DataManager, return None is not there either
+        data = DataManager.instance().get(origin=self.origin, uri=id)
+        if data: return data.label
+        else: return None
+
     def attach_interactive_callbacks(self):
         def dynamic_update_generator(i):
             """Dynamic Parameter Callback"""
@@ -284,7 +309,7 @@ class GalaxyToolWidget(UIBuilder):
                 if not isinstance(change['new'], dict) and (change['new'] or change['new'] == 0): value = change['new']
                 if value:
                     if self.all_params[i]['type'] == 'data':
-                        if not is_url(value) and not extract_id(value): return
+                        if not is_url(value) and not self.lookup_id(value) and not self.lookup_name(value): return
                     try: self.dynamic_update({key: value})
                     except ConnectionError as e:
                         self.error = e.body
