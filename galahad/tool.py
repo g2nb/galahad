@@ -138,6 +138,7 @@ class GalaxyToolWidget(UIBuilder):
         # Special case for data parameters
         if task_param['type'] == 'data':
             param_spec['default'] = self.default_value_name(param_spec['default'], task_param.get('options'))
+            param_spec['sendto'] = False
 
     def default_value_name(self, id, choices):
         if not choices: return id
