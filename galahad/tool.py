@@ -141,7 +141,7 @@ class GalaxyToolWidget(UIBuilder):
             param_spec['sendto'] = False
 
     def default_value_name(self, id, choices):
-        if not choices: return id
+        if not choices or not id: return id
         display_name = self.lookup_name(id[0])
         if display_name: return [display_name]
         else: return id
