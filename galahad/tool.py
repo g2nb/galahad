@@ -5,13 +5,13 @@ from copy import deepcopy
 from IPython.display import display
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool, HistoryDatasetAssociation
-from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager, EventManager
+from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager, EventManager, ToolManager
 from nbtools.uibuilder import UIBuilderBase
 from nbtools.utils import is_url
 
 from .dataset import GalaxyDatasetWidget
 from .utils import (GALAXY_LOGO, session_color, galaxy_url, server_name, data_icon, poll_data_and_update,
-                    current_history, limited_eval, data_name)
+                    current_history, limited_eval, data_name, strip_version)
 
 
 class GalaxyToolWidget(UIBuilder):
@@ -242,16 +242,17 @@ class GalaxyToolWidget(UIBuilder):
     def load_tool_inputs(self):
         if 'inputs' not in self.tool.wrapped:
             tool_json = self.tool.gi.gi.tools.build(
-                tool_id=self.tool.id, history_id=current_history(self.tool.gi).id)
+                tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, tool_version=self.version)
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
-    def __init__(self, tool=None, origin='', id='', **kwargs):
+    def __init__(self, tool=None, origin='', id='', version=None, **kwargs):
         """Initialize the tool widget"""
         self.tool = tool
         self.kwargs = kwargs
         if tool and origin is None: origin = galaxy_url(tool.gi)
         if tool and id is None: id = tool.id
         self.origin = origin
+        self.version = version or tool.version
 
         # Set the right look and error message if tool is None
         if self.tool is None or self.tool.gi is None:
@@ -538,7 +539,7 @@ class GalaxyTool(NBTool):
     def __init__(self, server_name, tool):
         NBTool.__init__(self)
         self.origin = server_name
-        self.id = tool.id
+        self.id = strip_version(tool.id)
         self.name = tool.name
         self.description = tool.wrapped['description']
         self.load = lambda **kwargs: GalaxyToolWidget(tool, id=self.id, origin=self.origin, **kwargs)
@@ -584,3 +585,28 @@ class GalaxyUploadTool(NBTool):
         self.name = 'Upload Data'
         self.description = 'Upload data files to Galaxy server'
         self.load = lambda **kwargs: GalaxyUploadTool.GalaxyUploadWidget(self, session)
+
+
+def load_tool(sessions, id, session_index='https://usegalaxy.org', version=None):
+    """Return a tool widget for the specified tool id,
+       regardless of whether it's been registered with the ToolManager or not.
+       Useful for loading old versions of tools."""
+
+    session = sessions.make(session_index)  # Get the Galaxy session
+
+    def display_tool(session, version):
+        tool = session.tools.get(id)  # Get the Galaxy tool
+        version = version or tool.version  # Get the specified or latest version
+        return GalaxyToolWidget(tool, version=version)  # Return the tool widget
+
+    if not session:
+        placeholder = ToolManager.create_placeholder_widget(session_index, id)
+
+        def login_callback(data):
+            placeholder.clear_output()
+            with placeholder: display(display_tool(data, version))
+
+        EventManager.instance().register("galaxy.login", login_callback)
+        return placeholder
+
+    else: return display_tool(session, version)

@@ -1,5 +1,5 @@
 from .authentication import GALAXY_SERVERS, GalaxyAuthWidget
-from .tool import GalaxyToolWidget
+from .tool import GalaxyToolWidget, load_tool
 from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session

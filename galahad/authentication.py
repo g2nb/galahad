@@ -8,7 +8,7 @@ from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool, GalaxyUploadTool
 from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update, \
-    skip_tool, data_name
+    skip_tool, data_name, strip_version
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -132,8 +132,9 @@ class GalaxyAuthWidget(UIBuilder):
         safe_list = OrderedDict()
         for galaxy_tool in raw_list:
             if skip_tool(galaxy_tool): continue
-            if GalaxyAuthWidget.later_version(safe_list.get(galaxy_tool.name), galaxy_tool):
-                safe_list[galaxy_tool.name] = galaxy_tool
+            base_id = strip_version(galaxy_tool.id)
+            if GalaxyAuthWidget.later_version(safe_list.get(base_id), galaxy_tool):
+                safe_list[base_id] = galaxy_tool
         return list(safe_list.values())
 
     @staticmethod

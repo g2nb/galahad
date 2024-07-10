@@ -84,6 +84,12 @@ def skip_tool(tool):
     return tool.name in ['Data Fetch', 'Export datasets', 'Apply rules', 'Upload File']
 
 
+def strip_version(raw_id):
+    if '/' in raw_id:
+        return '/'.join(raw_id.split('/')[0:-1])
+    else: return raw_id
+
+
 def limited_eval(raw):
     # Value is a boolean
     if   raw.lower() == 'true': return True
