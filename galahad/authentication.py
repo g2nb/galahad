@@ -86,7 +86,8 @@ class GalaxyAuthWidget(UIBuilder):
             EventManager.instance().dispatch("galaxy.history_refresh", self.session)
 
         history_widget = UIBuilder(refresh_history, name=self.session.gi.email, subtitle=galaxy_url(self.session),
-            display_header=False, run_label='Refresh History', collapse=False, logo=GALAXY_LOGO, color=session_color(),
+            display_header=False, logo=GALAXY_LOGO, color=session_color(galaxy_url(self.session)), collapse=False,
+            run_label='Refresh History', busy=True, info='Signing in to Galaxy',
             parameters={
                 'history': {
                     'label': 'History',
@@ -96,6 +97,7 @@ class GalaxyAuthWidget(UIBuilder):
                     'optional': True
                 }
         })
+        self.history_widget = history_widget
         display(history_widget)
 
         def change_history(change):
@@ -117,6 +119,7 @@ class GalaxyAuthWidget(UIBuilder):
 
     def register_session(self):
         """Register the validated credentials with the SessionList"""
+        self.history_widget.info = 'Registering session'
         session.register(self.session)
 
     def register_tools(self):
@@ -125,9 +128,11 @@ class GalaxyAuthWidget(UIBuilder):
         safe_tools = self.safe_tools()
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in safe_tools]
         tools.append(GalaxyUploadTool(server, self.session))
+        self.history_widget.info = 'Registering tools'
         ToolManager.instance().register_all(tools)
 
     def safe_tools(self):
+        self.history_widget.info = 'Querying Galaxy for list of tools'
         raw_list = self.session.tools.list()
         safe_list = OrderedDict()
         for galaxy_tool in raw_list:
@@ -158,6 +163,7 @@ class GalaxyAuthWidget(UIBuilder):
         def create_history_lambda(history): return lambda: GalaxyHistoryWidget(history)
         def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
 
+        self.history_widget.info = 'Querying Galaxy for histories'
         for history in self.session.histories.list():
             # Register a custom data group widget (GalaxyHistoryWidget) with the manager
             DataManager.instance().group_widget(origin=origin, group=history.name, widget=create_history_lambda(history))
@@ -170,12 +176,17 @@ class GalaxyAuthWidget(UIBuilder):
                 DataManager.instance().data_widget(origin=data.origin, uri=data.uri, widget=create_dataset_lambda(content.id))
                 data_list.append(data)
                 poll_data_and_update(content)
+        self.history_widget.info = 'Registering history contents'
         DataManager.instance().register_all(data_list)
 
     def trigger_login(self):
         """Dispatch a login event after authentication"""
+        self.history_widget.info = 'Loading tool widgets embedded in the notebook'
         EventManager.instance().dispatch("galaxy.login", self.session)
+        self.history_widget.info = 'Finalizing session'
         EventManager.instance().dispatch("nbtools.refresh_data", None)
+        self.history_widget.info = ''
+        self.history_widget.busy = False
 
 
 class AuthenticationTool(NBTool):
