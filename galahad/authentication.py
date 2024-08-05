@@ -164,12 +164,12 @@ class GalaxyAuthWidget(UIBuilder):
         def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
 
         self.history_widget.info = 'Querying Galaxy for histories'
-        for history in self.session.histories.list():
+        for history in self.session.histories.list()[:20]:
             # Register a custom data group widget (GalaxyHistoryWidget) with the manager
             DataManager.instance().group_widget(origin=origin, group=history.name, widget=create_history_lambda(history))
 
             # Add data entries for all output files
-            for content in history.content_infos:
+            for content in history.content_infos[:100]:
                 if content.wrapped['deleted']: continue
                 kind = 'error' if content.state == 'error' else (content.wrapped['extension'] if 'extension' in content.wrapped else '')
                 data = Data(origin=origin, group=history.name, uri=content.id, label=data_name(content), kind=kind, icon=data_icon(content.state))
