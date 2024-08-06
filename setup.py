@@ -1,14 +1,14 @@
 from setuptools import setup
 
 
-__version__ = '24.02'
+__version__ = '24.08'
 
 
 with open('README.md') as f:
     long_description = f.read()
 
 
-setup(name='galahad',
+setup(name='galaxy-galahad',
       packages=['galahad'],
       version=__version__,
       description='Connect to the Galaxy platform within Jupyter notebooks',
