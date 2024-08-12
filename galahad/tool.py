@@ -2,10 +2,10 @@ import inspect
 import json
 import os
 from copy import deepcopy
-from IPython.display import display
+from IPython.display import display, HTML
 from bioblend import ConnectionError
 from bioblend.galaxy.objects import Tool, HistoryDatasetAssociation
-from nbtools import NBTool, UIBuilder, python_safe, Data, DataManager, EventManager, ToolManager
+from nbtools import NBTool, UIBuilder, UIOutput, python_safe, Data, DataManager, EventManager, ToolManager
 from nbtools.uibuilder import UIBuilderBase
 from nbtools.utils import is_url
 
@@ -568,7 +568,13 @@ class GalaxyUploadTool(NBTool):
         def create_function_wrapper(self):
             def upload_data(datasets):
                 if type(datasets) == str: datasets = [datasets]
+                count = 1
                 for dataset in datasets:
+                    # Display uploading... placeholder
+                    placeholder = UIOutput(name='Uploading...', info=f'Uploading file {count} of {len(datasets)}...',
+                                           logo='none', color=session_color(galaxy_url(self.session), secondary_color=True))
+                    display(placeholder)
+
                     # Upload the dataset
                     history = current_history(self.session)
                     dataset_json = self.session.gi.tools.put_url(content=dataset, history_id=history.id)
@@ -576,6 +582,9 @@ class GalaxyUploadTool(NBTool):
 
                     # Display a dataset widget
                     display(GalaxyDatasetWidget(dataset, logo='none', color=session_color(galaxy_url(self.session), secondary_color=True)))
+                    placeholder.close()
+                    display(HTML('&nbsp;'))
+                    count += 1
             return upload_data
 
     def __init__(self, server_name, session):

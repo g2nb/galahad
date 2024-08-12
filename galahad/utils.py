@@ -71,7 +71,7 @@ def poll_data_and_update(dataset):
                     ToolManager.instance().send_update()
             poll_data_and_update(dataset)
 
-        timer = Timer(15.0, lambda: dataset.refresh() and update_registry())
+        timer = Timer(15.0, lambda: (dataset.refresh() if hasattr(dataset, 'refresh') else True) and update_registry())
         timer.start()
 
 
