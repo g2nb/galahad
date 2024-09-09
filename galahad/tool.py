@@ -245,7 +245,7 @@ class GalaxyToolWidget(UIBuilder):
                 tool_id=self.tool.id, history_id=current_history(self.tool.gi).id, tool_version=self.version)
             self.tool = Tool(wrapped=tool_json, parent=self.tool.parent, gi=self.tool.gi)
 
-    def __init__(self, tool=None, origin='', id='', version=None, **kwargs):
+    def __init__(self, tool=None, auto_load=True, origin='', id='', version=None, **kwargs):
         """Initialize the tool widget"""
         self.tool = tool
         self.kwargs = kwargs
@@ -257,6 +257,18 @@ class GalaxyToolWidget(UIBuilder):
         # Set the right look and error message if tool is None
         if self.tool is None or self.tool.gi is None:
             self.handle_error_task('No Galaxy tool specified.', **kwargs)
+            return
+
+        # Display "click to load" placeholder
+        if not auto_load:
+            def load_from_galaxy():
+                display(GalaxyToolWidget(tool=tool, auto_load=True, origin=origin, id=id, **kwargs))
+                self.form.close()
+
+            UIBuilder.__init__(self, load_from_galaxy, origin=origin, id=id, name=tool.name, display_header=False,
+                               subtitle=f"Version {self.tool.wrapped['version']}", collapse=False,  # Initiate widget
+                               logo=GALAXY_LOGO, color=session_color(galaxy_url(self.tool.gi)), run_label='Load Tool')
+            self.info = 'Click to load this tool\'s parameters from Galaxy.'
             return
 
         self.load_tool_inputs()
@@ -603,17 +615,17 @@ def load_tool(sessions, id, session_index='https://usegalaxy.org', version=None)
 
     session = sessions.make(session_index)  # Get the Galaxy session
 
-    def display_tool(session, version):
+    def display_tool(session, version, auto_load=True):
         tool = session.tools.get(id)  # Get the Galaxy tool
         version = version or tool.version  # Get the specified or latest version
-        return GalaxyToolWidget(tool, version=version)  # Return the tool widget
+        return GalaxyToolWidget(tool, auto_load=auto_load, version=version)  # Return the tool widget
 
     if not session:
         placeholder = ToolManager.create_placeholder_widget(session_index, id)
 
         def login_callback(data):
             placeholder.clear_output()
-            with placeholder: display(display_tool(data, version))
+            with placeholder: display(display_tool(data, version, auto_load=False))
 
         EventManager.instance().register("galaxy.login", login_callback)
         return placeholder

@@ -129,7 +129,7 @@ class GalaxyAuthWidget(UIBuilder):
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in safe_tools]
         tools.append(GalaxyUploadTool(server, self.session))
         self.history_widget.info = 'Registering tools'
-        ToolManager.instance().register_all(tools)
+        ToolManager.instance().register_all(tools, auto_load=False)
 
     def safe_tools(self):
         self.history_widget.info = 'Querying Galaxy for list of tools'
