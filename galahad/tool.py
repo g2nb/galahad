@@ -136,7 +136,7 @@ class GalaxyToolWidget(UIBuilder):
         if task_param['type'] == 'repeat': param_spec['default'] = task_param.get('value', task_param['default'])
 
         # Special case for data parameters
-        if task_param['type'] == 'data':
+        if param_spec['type'] == 'file':
             param_spec['default'] = self.default_value_name(param_spec['default'], task_param.get('options'))
             param_spec['sendto'] = False
 
