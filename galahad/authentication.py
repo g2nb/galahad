@@ -1,14 +1,14 @@
 from collections import OrderedDict
 from packaging.version import Version, InvalidVersion
 from bioblend.galaxy.objects import GalaxyInstance
-from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data
+from nbtools import UIBuilder, ToolManager, NBTool, EventManager, DataManager, Data, NBOrigin
 from IPython.display import display
 from .dataset import GalaxyDatasetWidget
 from .history import GalaxyHistoryWidget
 from .sessions import session
 from .tool import GalaxyTool, GalaxyUploadTool
 from .utils import GALAXY_LOGO, GALAXY_SERVERS, server_name, session_color, galaxy_url, data_icon, poll_data_and_update, \
-    skip_tool, data_name, strip_version
+    skip_tool, data_name, strip_version, current_history
 
 REGISTER_EVENT = """
     const target = event.target;
@@ -160,22 +160,38 @@ class GalaxyAuthWidget(UIBuilder):
     def register_history(self):
         data_list = []
         origin = server_name(galaxy_url(self.session))
-        def create_history_lambda(history): return lambda: GalaxyHistoryWidget(history)
-        def create_dataset_lambda(id): return lambda: GalaxyDatasetWidget(id)
 
+        # Load histories
         self.history_widget.info = 'Querying Galaxy for histories'
-        for history in self.session.histories.list()[:20]:
-            # Register a custom data group widget (GalaxyHistoryWidget) with the manager
-            DataManager.instance().group_widget(origin=origin, group=history.name, widget=create_history_lambda(history))
+        if DataManager.origin_exists(origin): DataManager.instance().unregister_all(origin, skip_update=True)
+        loaded_histories = self.session.histories.list()[:20]
 
-            # Add data entries for all output files
-            for content in history.content_infos[:100]:
-                if content.wrapped['deleted']: continue
-                kind = 'error' if content.state == 'error' else (content.wrapped['extension'] if 'extension' in content.wrapped else '')
-                data = Data(origin=origin, group=history.name, uri=content.id, label=data_name(content), kind=kind, icon=data_icon(content.state))
-                DataManager.instance().data_widget(origin=data.origin, uri=data.uri, widget=create_dataset_lambda(content.id))
-                data_list.append(data)
-                poll_data_and_update(content)
+        # Register the Galaxy origin with working buttons
+        def refresh_callback(option):
+            self.register_history()
+            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+
+        def switch_callback(option):
+            # Set the current history
+            self.session.current_history = self.session.histories.get(option)
+            self.register_history()
+            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+
+        origin_obj = NBOrigin(name=origin, click_disabled=True, description='Current Galaxy History', buttons=[
+            {'name': 'Refresh Histories', 'icon': 'fa fa-refresh', 'callback': refresh_callback},
+            {'name': 'Switch History', 'icon': 'fa fa-exchange-alt', 'options':
+                [{ 'label': history.name, 'value': history.id } for history in loaded_histories], 'callback': switch_callback}
+        ])
+        DataManager.instance().register_origin(origin_obj)
+
+        # Add data entries for all output files
+        history = current_history(self.session)
+        for content in history.content_infos[:100]:
+            if content.wrapped['deleted']: continue
+            kind = 'error' if content.state == 'error' else (content.wrapped['extension'] if 'extension' in content.wrapped else '')
+            data = Data(origin=origin, group=history.name, uri=content.id, label=data_name(content), kind=kind, icon=data_icon(content.state))
+            data_list.append(data)
+            poll_data_and_update(content)
         self.history_widget.info = 'Registering history contents'
         DataManager.instance().register_all(data_list)
 
