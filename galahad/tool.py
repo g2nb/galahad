@@ -279,20 +279,17 @@ class GalaxyToolWidget(UIBuilder):
         self.ui_args = self.create_ui_args(kwargs)                              # Merge kwargs (allows overrides)
         UIBuilder.__init__(self, self.function_wrapper, **self.ui_args)         # Initiate the widget
         self.attach_interactive_callbacks()
-        self.attach_help_section()
+        self.attach_menu_items()
 
     def history_callback(self, data):
+        self.info = 'The selected Galaxy history has been updated and this tool may be displaying stale history items. To refresh the items being displayed, go to the Gear menu and select Reload Tool.'
+
+    def reload_tool(self):
+        self.busy = True
         # Update history choices for all data params
-        for i in range(len(self.all_params)):
-            if self.all_params[i].get('type') == 'data':
-                # Get all matching data in the current history
-                origin = server_name(galaxy_url(data))                                          # Get server/origin
-                history = current_history(data).name                                            # Get history
-                kinds = self.form.form.kwargs_widgets[i].input.file_list.children[0].kinds      # Get accepted kinds
-                matching_data = DataManager.instance().filter(origin=origin, group=history, kinds=kinds)
-                matching_data.reverse()                                                         # Display latest at top
-                updated = { data.label: data.uri for data in matching_data }                    # Build new data dict
-                self.form.form.kwargs_widgets[i].input.file_list.children[0].choices = updated  # Update menu
+        self.dynamic_update()
+        self.info = ''
+        self.busy = False
 
     def lookup_id(self, display_name):
         # Attempt to look up id using this tool's data map
@@ -535,11 +532,18 @@ class GalaxyToolWidget(UIBuilder):
         if raw_value is not None: return raw_value
         else: return ''
 
-    def attach_help_section(self):
-        self.extra_menu_items = {**self.extra_menu_items, **{'Display Help': {
+    def attach_menu_items(self):
+        self.extra_menu_items = {
+            **self.extra_menu_items,
+            **{'Display Help': {
                 'action': 'method',
                 'code': 'display_help'
-            }}}
+            }},
+            **{'Reload Tool': {
+                'action': 'method',
+                'code': 'reload_tool'
+            }}
+        }
 
     def display_help(self):
         self.info = self.tool.wrapped['help']

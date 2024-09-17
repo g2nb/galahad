@@ -81,34 +81,9 @@ class GalaxyAuthWidget(UIBuilder):
         """Replace the unauthenticated widget with the authenticated mode"""
         self.form.form.children[2].value = ''        # Blank password so it doesn't get serialized
 
-        def refresh_history(history):
-            self.register_history()
-            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
-
-        history_widget = UIBuilder(refresh_history, name=self.session.gi.email, subtitle=galaxy_url(self.session),
-            display_header=False, logo=GALAXY_LOGO, color=session_color(galaxy_url(self.session)), collapse=False,
-            run_label='Refresh History', busy=True, info='Signing in to Galaxy',
-            parameters={
-                'history': {
-                    'label': 'History',
-                    'type': 'choice',
-                    'description': 'Select a Galaxy history to use',
-                    'choices': {h.name: h.id for h in self.session.histories.list(deleted=False)},
-                    'optional': True
-                }
-        })
-        self.history_widget = history_widget
-        display(history_widget)
-
-        def change_history(change):
-            # Set the current history
-            self.session.current_history = self.session.histories.get(history_widget.form.form.children[0].input.value)
-
-            # Trigger file inputs of tools to update their history lists
-            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
-
-        history_widget.form.form.children[0].input.observe(change_history)
-        self.form.close()
+        self.form.form.close()
+        self.form.display_header = False
+        self.form.display_footer = False
 
     def prepare_session(self):
         """Prepare a valid session by registering the session and tools"""
@@ -119,7 +94,7 @@ class GalaxyAuthWidget(UIBuilder):
 
     def register_session(self):
         """Register the validated credentials with the SessionList"""
-        self.history_widget.info = 'Registering session'
+        self.info = 'Registering session'
         session.register(self.session)
 
     def register_tools(self):
@@ -128,11 +103,11 @@ class GalaxyAuthWidget(UIBuilder):
         safe_tools = self.safe_tools()
         tools = [GalaxyTool(server, galaxy_tool) for galaxy_tool in safe_tools]
         tools.append(GalaxyUploadTool(server, self.session))
-        self.history_widget.info = 'Registering tools'
+        self.info = 'Registering tools'
         ToolManager.instance().register_all(tools, auto_load=False)
 
     def safe_tools(self):
-        self.history_widget.info = 'Querying Galaxy for list of tools'
+        self.info = 'Querying Galaxy for list of tools'
         raw_list = self.session.tools.list()
         safe_list = OrderedDict()
         for galaxy_tool in raw_list:
@@ -157,25 +132,32 @@ class GalaxyAuthWidget(UIBuilder):
 
         return version_a <= version_b
 
-    def register_history(self):
+    def register_history(self, reload=False):
         data_list = []
         origin = server_name(galaxy_url(self.session))
 
         # Load histories
-        self.history_widget.info = 'Querying Galaxy for histories'
+        self.info = 'Querying Galaxy for histories'
         if DataManager.origin_exists(origin): DataManager.instance().unregister_all(origin, skip_update=True)
         loaded_histories = self.session.histories.list()[:20]
+        if not reload: self.session.current_history = loaded_histories[0]
 
         # Register the Galaxy origin with working buttons
         def refresh_callback(option):
-            self.register_history()
+            self.busy = True
+            self.info = 'Querying the Galaxy server to get the latest history data'
+            self.register_history(reload=True)
             EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+            self.busy = False
 
         def switch_callback(option):
             # Set the current history
+            self.busy = True
+            self.info = 'Switching current Galaxy history'
             self.session.current_history = self.session.histories.get(option)
-            self.register_history()
+            self.register_history(reload=True)
             EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+            self.busy = False
 
         origin_obj = NBOrigin(name=origin, click_disabled=True, description='Current Galaxy History', buttons=[
             {'name': 'Refresh Histories', 'icon': 'fa fa-refresh', 'callback': refresh_callback},
@@ -192,17 +174,18 @@ class GalaxyAuthWidget(UIBuilder):
             data = Data(origin=origin, group=history.name, uri=content.id, label=data_name(content), kind=kind, icon=data_icon(content.state))
             data_list.append(data)
             poll_data_and_update(content)
-        self.history_widget.info = 'Registering history contents'
+        self.info = 'Registering history contents'
         DataManager.instance().register_all(data_list)
+        self.info = 'History successfully reloaded'
 
     def trigger_login(self):
         """Dispatch a login event after authentication"""
-        self.history_widget.info = 'Loading tool widgets embedded in the notebook'
+        self.info = 'Loading tool widgets embedded in the notebook'
         EventManager.instance().dispatch("galaxy.login", self.session)
-        self.history_widget.info = 'Finalizing session'
+        self.info = 'Finalizing session'
         EventManager.instance().dispatch("nbtools.refresh_data", None)
-        self.history_widget.info = ''
-        self.history_widget.busy = False
+        self.info = ''
+        self.busy = False
 
 
 class AuthenticationTool(NBTool):
