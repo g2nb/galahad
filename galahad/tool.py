@@ -282,7 +282,8 @@ class GalaxyToolWidget(UIBuilder):
         self.attach_menu_items()
 
     def history_callback(self, data):
-        self.info = 'The selected Galaxy history has been updated and this tool may be displaying stale history items. To refresh the items being displayed, go to the Gear menu and select Reload Tool.'
+        if 'poll' not in data or not data['poll']:
+            self.info = 'The selected Galaxy history has been updated and this tool may be displaying stale history items. To refresh the items being displayed, go to the Gear menu and select Reload Tool.'
 
     def reload_tool(self):
         self.busy = True

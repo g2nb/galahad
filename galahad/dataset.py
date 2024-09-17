@@ -62,7 +62,7 @@ class GalaxyDatasetWidget(UIOutput):
                 DataManager.instance().group_widget(origin=self.origin, group=group, widget=self)
             DataManager.instance().register_all(all_data)
             poll_data_and_update(self.dataset)
-            EventManager.instance().dispatch("galaxy.history_refresh", session.get(0))  # Update data parameters
+            EventManager.instance().dispatch("galaxy.history_refresh", {'session': session.get(0), 'poll': True})  # Update data parameters
 
     def poll(self, **kwargs):
         """Poll the Galaxy server for the dataset info and display it in the widget"""

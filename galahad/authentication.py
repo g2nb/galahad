@@ -147,7 +147,7 @@ class GalaxyAuthWidget(UIBuilder):
             self.busy = True
             self.info = 'Querying the Galaxy server to get the latest history data'
             self.register_history(reload=True)
-            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+            EventManager.instance().dispatch("galaxy.history_refresh", { 'session': self.session, 'poll': False })
             self.busy = False
 
         def switch_callback(option):
@@ -156,7 +156,7 @@ class GalaxyAuthWidget(UIBuilder):
             self.info = 'Switching current Galaxy history'
             self.session.current_history = self.session.histories.get(option)
             self.register_history(reload=True)
-            EventManager.instance().dispatch("galaxy.history_refresh", self.session)
+            EventManager.instance().dispatch("galaxy.history_refresh", { 'session': self.session, 'poll': False })
             self.busy = False
 
         origin_obj = NBOrigin(name=origin, click_disabled=True, description='Current Galaxy History', buttons=[
