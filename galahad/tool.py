@@ -522,6 +522,7 @@ class GalaxyToolWidget(UIBuilder):
         self.form = UIBuilderBase(self.function_wrapper, _parent=self, **self.ui_args)
         self.output = self.form.output
         self.children = [self.form, self.output]
+        self.attach_menu_items()
 
         # Attach the dynamic refresh callbacks to the new form
         self.attach_interactive_callbacks()
