@@ -71,6 +71,7 @@ class GalaxyAuthWidget(UIBuilder):
         """Login to the Galaxy server"""
         try:
             self.session = GalaxyInstance(url=server, email=email, password=password)
+            self.error = ''
         except Exception:
             self.error = 'Invalid email address or password. Please try again.'
             return
